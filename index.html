@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原初 · GENESIS — 人工生命演化场</title>
+<style>
+:root{
+  --plant:#46e08a; --herb:#ffb547; --pred:#ff4d6d;
+  --ink:#e8eef7; --dim:#8b98ac; --line:rgba(255,255,255,.09);
+  --glass:rgba(12,19,31,.72);
+}
+*{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#04070d;
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--ink);font-size:13px}
+canvas{position:absolute;inset:0;display:block}
+#stage{position:absolute;inset:0;cursor:crosshair;touch-action:none}
+.glass{background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
+
+/* ---------- 顶栏 ---------- */
+#topbar{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;
+  align-items:center;pointer-events:none;z-index:10;gap:12px}
+#topbar>.glass{pointer-events:auto}
+#brand{display:flex;align-items:center;gap:10px;padding:9px 16px}
+#brand .logo{width:12px;height:12px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#b8ffe0,#2ecc7f 55%,#0e7a49);
+  box-shadow:0 0 14px #3ddc84aa;animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 22px #3ddc84dd}}
+#brand b{font-size:15px;letter-spacing:4px}
+#brand span{color:var(--dim);font-size:10px;letter-spacing:3px}
+#stats{display:flex;align-items:center;gap:18px;padding:9px 18px}
+.stat{display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
+.stat i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.stat b{font-size:14px;min-width:30px;display:inline-block}
+.stat small{color:var(--dim)}
+.dot-p{background:var(--plant);box-shadow:0 0 8px var(--plant)}
+.dot-h{background:var(--herb);box-shadow:0 0 8px var(--herb)}
+.dot-d{background:var(--pred);box-shadow:0 0 8px var(--pred)}
+#clock{display:flex;flex-direction:column;line-height:1.25;border-left:1px solid var(--line);padding-left:16px}
+#clock b{font-size:13px}
+#clock small{color:var(--dim);font-size:10px;letter-spacing:2px}
+.sep{width:1px;height:22px;background:var(--line)}
+#controls{display:flex;gap:6px;padding:7px 9px;align-items:center}
+.iconbtn{width:32px;height:32px;border-radius:9px;border:1px solid transparent;background:transparent;
+  color:var(--dim);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:.15s}
+.iconbtn:hover{background:rgba(255,255,255,.07);color:var(--ink)}
+.iconbtn.active{background:rgba(70,224,138,.14);color:var(--plant);border-color:rgba(70,224,138,.35)}
+.seg{display:flex;background:rgba(255,255,255,.05);border-radius:9px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--dim);padding:5px 9px;border-radius:7px;
+  cursor:pointer;font-size:12px;min-width:30px;transition:.15s}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:rgba(255,255,255,.13);color:var(--ink)}
+#pausePill{display:none;position:absolute;top:64px;left:50%;transform:translateX(-50%);
+  padding:6px 18px;letter-spacing:6px;font-size:12px;color:var(--dim);z-index:9}
+
+/* ---------- 右侧图表 ---------- */
+#side{position:absolute;top:74px;right:12px;width:242px;padding:13px 14px 10px;z-index:9}
+#side h3{font-size:11px;color:var(--dim);font-weight:500;letter-spacing:2px;margin-bottom:7px;
+  display:flex;justify-content:space-between}
+#side h3 em{font-style:normal;color:#5e6b80;font-size:10px;letter-spacing:0}
+.chart-wrap{margin-bottom:13px}
+#side canvas{width:100%;display:block;border-radius:8px;background:rgba(0,0,0,.25)}
+.legend{display:flex;gap:10px;margin-top:5px;font-size:10px;color:var(--dim)}
+.legend i{width:8px;height:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+
+/* ---------- 检视面板 ---------- */
+#inspector{position:absolute;top:74px;left:12px;width:238px;padding:14px;z-index:9;display:none}
+#inspector .head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+#inspector .swatch{width:26px;height:26px;border-radius:50%;flex:none}
+#inspector .head b{font-size:14px}
+#inspector .head small{display:block;color:var(--dim);font-size:10px;margin-top:2px}
+.erow{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:11px}
+.erow label{width:56px;color:var(--dim);flex:none}
+.erow .track{flex:1;height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden}
+.erow .fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#3ddc84,#9ef0c0)}
+.erow.energy .fill{background:linear-gradient(90deg,#ffb547,#ffe0a8)}
+.erow val{width:40px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+#inspMeta{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);
+  font-size:10px;color:var(--dim);line-height:1.9}
+#inspClose{position:absolute;top:9px;right:11px}
+.tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:10px;margin-right:5px}
+.tag.herb{background:rgba(255,181,71,.15);color:var(--herb)}
+.tag.pred{background:rgba(255,77,109,.15);color:var(--pred)}
+.tag.plant{background:rgba(70,224,138,.15);color:var(--plant)}
+
+/* ---------- 工具栏 ---------- */
+#toolbar{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;
+  display:flex;gap:4px;padding:7px}
+#toolbar button{width:54px;padding:7px 0 6px;border:0;background:transparent;color:var(--dim);
+  border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:.15s;font-size:11px}
+#toolbar button .ico{font-size:19px;line-height:1;filter:grayscale(.3)}
+#toolbar button:hover{background:rgba(255,255,255,.07);color:var(--ink)}
+#toolbar button.on{background:rgba(70,224,138,.13);color:var(--ink)}
+#toolbar button.on .ico{filter:none;transform:translateY(-1px)}
+#toolbar kbd{font-size:8px;color:#56637a;border:1px solid var(--line);border-radius:4px;padding:0 3px}
+
+/* ---------- 事件日志 ---------- */
+#log{position:absolute;left:12px;bottom:14px;width:278px;max-width:calc(100vw - 360px);
+  padding:10px 13px;z-index:8;max-height:44vh;overflow-y:auto;overscroll-behavior:contain}
+#log h3{font-size:10px;color:#56637a;letter-spacing:3px;margin-bottom:6px;font-weight:500}
+#log .e{font-size:11px;color:var(--dim);line-height:1.55;white-space:normal;
+  overflow-wrap:anywhere;display:flex;gap:8px;margin:4px 0;
+  opacity:0;transform:translateX(-6px);animation:slidein .4s forwards}
+#log .e i{width:6px;height:6px;border-radius:50%;flex:none;margin-top:5.5px}
+#log::-webkit-scrollbar{width:4px}
+#log::-webkit-scrollbar-thumb{background:rgba(140,170,200,.25);border-radius:2px}
+#log .e.good{color:#9edfba}#log .e.warn{color:#ffce8a}#log .e.bad{color:#ff9aa9}
+@keyframes slidein{to{opacity:1;transform:none}}
+
+/* ---------- 小地图 ---------- */
+#minimap-wrap{position:absolute;right:14px;bottom:14px;z-index:8;padding:7px}
+#minimap{display:block;border-radius:8px;cursor:pointer;background:rgba(0,0,0,.3)}
+
+/* ---------- 遮罩层 ---------- */
+.overlay{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 40%,rgba(9,20,18,.82),rgba(3,6,11,.94));
+  backdrop-filter:blur(6px)}
+.overlay.hidden{display:none}
+.card{max-width:560px;text-align:center;padding:40px 46px}
+.card h1{font-size:52px;letter-spacing:18px;font-weight:600;margin-left:18px;
+  background:linear-gradient(180deg,#eafff4,#7fe6b3 60%,#2ecc7f);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  text-shadow:0 0 60px rgba(61,220,132,.25)}
+.card .sub{color:var(--dim);letter-spacing:9px;font-size:11px;margin:12px 0 26px}
+.card p{color:#aebacb;line-height:2;margin-bottom:8px;font-size:13px}
+.card .tips{text-align:left;margin:22px auto 28px;max-width:400px;line-height:2.1;font-size:12px;color:#8fa0b8}
+.card .tips b{color:#cfe3d8;font-weight:500}
+.bigbtn{border:1px solid rgba(70,224,138,.5);color:#dcffef;
+  background:linear-gradient(180deg,rgba(70,224,138,.18),rgba(70,224,138,.07));
+  padding:13px 44px;border-radius:30px;font-size:15px;letter-spacing:6px;cursor:pointer;
+  box-shadow:0 0 30px rgba(61,220,132,.18),inset 0 1px 0 rgba(255,255,255,.15);transition:.2s}
+.bigbtn:hover{transform:translateY(-2px);box-shadow:0 6px 36px rgba(61,220,132,.35)}
+.card h2{font-size:24px;letter-spacing:10px;margin-bottom:20px}
+#helpClose{position:absolute;top:18px;right:22px}
+.vignette{position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55))}
+
+/* ---------- 窄屏适配（桌面优先，兼顾小窗） ---------- */
+@media (max-width:1150px){
+  #stats{gap:10px;padding:8px 13px}
+  #stats .stat small{display:none}
+  #brand span{display:none}
+  #brand{padding:9px 13px}
+  #side{width:196px;top:110px}
+  #inspector{top:110px}
+}
+@media (max-width:860px){
+  #brand b{letter-spacing:2px}
+  #stats .stat:last-child{display:none}
+  #clock{padding-left:10px}
+  #log,#minimap-wrap{display:none}
+  #side{width:168px;padding:10px}
+  #side canvas{height:auto}
+  #side h3 em{display:none}
+  #toolbar button{width:46px;font-size:10px}
+  #inspector{width:200px}
+}
+#hint{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:8;
+  padding:6px 16px;font-size:11px;color:#7a879c;opacity:0;transition:.3s;pointer-events:none}
+#hint.show{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="vignette"></div>
+
+<!-- 顶栏 -->
+<div id="topbar">
+  <div class="glass" id="brand">
+    <div class="logo"></div>
+    <div><b>原初</b><br><span>GENESIS · LIFE SIMULATOR</span></div>
+  </div>
+  <div class="glass" id="stats">
+    <div class="stat"><i class="dot-p"></i><b id="hPlants">0</b><small>植物</small></div>
+    <div class="stat"><i class="dot-h"></i><b id="hHerbs">0</b><small>植食者</small></div>
+    <div class="stat"><i class="dot-d"></i><b id="hPreds">0</b><small>捕食者</small></div>
+    <div class="sep"></div>
+    <div id="clock"><b id="hDay">第 1 天</b><small id="hPhase">黎明</small></div>
+    <div class="sep"></div>
+    <div class="stat"><small id="hFps">60 fps</small></div>
+  </div>
+  <div class="glass" id="controls">
+    <div class="seg" id="speedSeg">
+      <button data-s="1" class="on">1×</button>
+      <button data-s="2">2×</button>
+      <button data-s="4">4×</button>
+      <button data-s="8">8×</button>
+    </div>
+    <button class="iconbtn" id="pauseBtn" title="暂停 (空格)">⏸</button>
+    <button class="iconbtn" id="soundBtn" title="声音">🔈</button>
+    <button class="iconbtn" id="helpBtn" title="帮助 (H)">？</button>
+    <button class="iconbtn" id="resetBtn" title="重置世界">↻</button>
+    <button class="iconbtn" id="exportBtn" title="导出世界标本（可存入 U 盘 / 邮箱快照）">💾</button>
+    <button class="iconbtn" id="importBtn" title="从世界标本文件苏醒">📂</button>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+  </div>
+</div>
+<div class="glass" id="pausePill">已 暂 停</div>
+<div id="hint"></div>
+
+<!-- 右侧图表 -->
+<div class="glass" id="side">
+  <div class="chart-wrap">
+    <h3>种群数量 <em>POPULATION</em></h3>
+    <canvas id="cvPop" width="440" height="130"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--plant)"></i>植物</span>
+      <span><i style="background:var(--herb)"></i>植食者</span>
+      <span><i style="background:var(--pred)"></i>捕食者×8</span>
+    </div>
+  </div>
+  <div class="chart-wrap" style="margin-bottom:3px">
+    <h3>植食者性状演化 <em>TRAITS</em></h3>
+    <canvas id="cvTrait" width="440" height="130"></canvas>
+    <div class="legend">
+      <span><i style="background:#7ab8ff"></i>体型</span>
+      <span><i style="background:#c39bff"></i>速度</span>
+      <span><i style="background:#7af0d8"></i>感知</span>
+      <span><i style="background:#ffd166"></i>寿命</span>
+      <span><i style="background:#ff8fa3"></i>胆量</span>
+      <span><i style="background:#a8e6cf"></i>群聚</span>
+      <span><i style="background:#fff;height:3px"></i>食性</span>
+    </div>
+  </div>
+</div>
+
+<!-- 检视面板 -->
+<div class="glass" id="inspector">
+  <button class="iconbtn" id="inspClose">✕</button>
+  <div class="head">
+    <div class="swatch" id="inspSwatch"></div>
+    <div><b id="inspName">—</b><small id="inspSub">—</small></div>
+  </div>
+  <div id="inspBars"></div>
+  <div id="inspMeta"></div>
+</div>
+
+<!-- 工具栏 -->
+<div class="glass" id="toolbar"></div>
+
+<!-- 事件日志 -->
+<div class="glass" id="log">
+  <h3>世 界 纪 元</h3>
+  <div id="logList"></div>
+</div>
+
+<!-- 小地图 -->
+<div class="glass" id="minimap-wrap"><canvas id="minimap" width="200" height="126"></canvas></div>
+
+<!-- 开始遮罩 -->
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <h1>原初</h1>
+    <div class="sub">A R T I F I C I A L &nbsp; E D E N</div>
+    <p>这里没有剧本。每一只生物都携带着会变异的基因出生，<br>
+       它们觅食、逃亡、繁衍、死亡，把性状留给后代。<br>
+       植物有生长策略，动物有性格倾向，地形塑造生态位。</p>
+    <p>几分钟后它们会变成什么模样，连创造者也无法预知。</p>
+    <div class="tips">
+      <b>拖拽</b> 移动视角 · <b>滚轮</b> 缩放 · <b>点击生物</b> 查看基因谱<br>
+      <b>🌱 播种 / ✨ 营养</b> 孕育绿洲 · <b>☄️ 陨石</b> 投放灭绝事件<br>
+      <b>空格</b> 暂停 · <b>1–6</b> 切换工具 · <b>H</b> 帮助<br>
+      <b>封存</b> 关闭页面或关机时世界自动封存，下次可从封面苏醒
+    </div>
+    <button class="bigbtn" id="startBtn">点 燃 生 命</button>
+    <button class="bigbtn" id="awakeBtn" style="display:none;margin-top:12px">苏 醒</button>
+  </div>
+</div>
+
+<!-- 帮助遮罩 -->
+<div class="overlay hidden" id="helpOverlay">
+  <button class="iconbtn" id="helpClose" style="position:absolute;top:18px;right:22px">✕</button>
+  <div class="card">
+    <h2>如 何 观 测</h2>
+    <div class="tips" style="max-width:480px">
+      <b>生态循环：</b>植物从土壤肥力中生长，动物啃食植物或猎杀更小的动物；
+      所有生物死后都将身体归还给土壤，形成物质循环。<br><br>
+      <b>开放食物链：</b>谁吃谁不由出身决定，而由<b>体型</b>与<b>食性基因</b>决定——
+      任何足够大且足够"想吃肉"的个体都能猎杀更小的动物。植食者的后代可能一步步变成新的捕食支系，
+      体色也会随之由橙转红。没有写死的物种边界，营养级可以自己长出来。<br><br>
+      <b>演化机制：</b>生物的体型、速度、感知、代谢、繁殖倾向、寿命、胆量、群聚、食性与体色都是基因。
+      种群密集时，表型相近的个体会<b>有性生殖</b>——双亲基因逐位点重组再突变（金白色生育辉光）；
+      拓殖前沿找不到配偶的个体则退回<b>克隆</b>。选型交配让食性渐行渐远的两支逐步停止通婚，
+      这正是物种分化的雏形。右上白色食性曲线越过分化线，意味着新的支系正在诞生。<br><br>
+      <b>干预工具：</b>播种与投放生物可按住鼠标连续施放；陨石会清空落点附近的所有生命并形成肥沃陨石坑；
+      小地图点击可快速跳转。当一个物种灭绝，世界不会停止——等待新的平衡。<br><br>
+      <b>快捷键：</b>空格 暂停 / 1–6 工具 / H 帮助 / ↻ 重新创世<br><br>
+      <b>封存与标本：</b>关闭页面或关机时，世界会自动封存；下次启动点封面上的「苏醒」，
+      同一条世界线将从离开的时刻继续。顶栏 💾 把当前世界导出为标本文件（可存入 U 盘、寄往 genesis.seed），
+      📂 用标本文件替换当前世界。死亡与灭绝永远不可撤销——封存是冬眠，不是回档。
+    </div>
+    <button class="bigbtn" id="helpOk">继 续 观 测</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   原初 GENESIS — 单文件人工生命演化模拟器
+   ===================================================================== */
+
+/* ---------------- 工具函数 ---------------- */
+const TAU = Math.PI * 2;
+const clamp = (v,a,b)=> v<a?a : v>b?b : v;
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const rand  = (a=1,b)=> b===undefined ? Math.random()*a : a+Math.random()*(b-a);
+const randInt = (a,b)=> (a+Math.random()*(b-a+1))|0;
+function gauss(){ // Box–Muller
+  let u=0,v=0;
+  while(!u) u=Math.random(); while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v);
+}
+const dist2=(x1,y1,x2,y2)=>{const dx=x2-x1,dy=y2-y1;return dx*dx+dy*dy;};
+
+/* ---------------- 世界常量 ---------------- */
+const WORLD_W=3000, WORLD_H=1900;
+const FCELL=34, FCOLS=Math.ceil(WORLD_W/FCELL), FROWS=Math.ceil(WORLD_H/FCELL);
+const HASH_CELL=140;
+const DAY_LEN=100;                 // 一个昼夜（模拟秒）
+const START={ plants:230, herbs:54, preds:10, hotspots:26 };
+const PLANT_CAP=860, ANIMAL_CAP=620;
+
+const TYPES={
+  herb:{ name:"植食者", size:6.0, speed:47, sense:98,  hue:40,  eatGain:18 },
+  pred:{ name:"捕食者", size:8.4, speed:56, sense:150, hue:352, eatGain:0  }
+};
+
+/* ---------------- 空间哈希 ---------------- */
+class SpatialHash{
+  constructor(cell){ this.cell=cell; this.m=new Map(); }
+  clear(){ this.m.clear(); }
+  insert(o){
+    const cx=(o.x/this.cell)|0, cy=(o.y/this.cell)|0, k=cx*4096+cy;
+    let a=this.m.get(k);
+    if(!a){ a=[]; this.m.set(k,a); }
+    a.push(o);
+  }
+  query(x,y,r,out){
+    out.length=0;
+    const c=this.cell, m=this.m;
+    const xMax=((WORLD_W+c)/c)|0, yMax=((WORLD_H+c)/c)|0;
+    const x0=Math.max(0,((x-r)/c)|0), x1=Math.min(xMax,((x+r)/c)|0);
+    const y0=Math.max(0,((y-r)/c)|0), y1=Math.min(yMax,((y+r)/c)|0);
+    for(let cy=y0;cy<=y1;cy++) for(let cx=x0;cx<=x1;cx++){
+      const a=m.get(cx*4096+cy);
+      if(a) for(let i=0;i<a.length;i++) out.push(a[i]);
+    }
+    return out;
+  }
+}
+
+/* ---------------- 肥力场（土壤养分，物质循环核心） ---------------- */
+const fert=new Float32Array(FCOLS*FROWS);
+function fidx(cx,cy){ return cy*FCOLS+cx; }
+function depositFert(x,y,amt,rad){
+  const cx0=Math.max(0,((x-rad)/FCELL)|0), cx1=Math.min(FCOLS-1,((x+rad)/FCELL)|0);
+  const cy0=Math.max(0,((y-rad)/FCELL)|0), cy1=Math.min(FROWS-1,((y+rad)/FCELL)|0);
+  const r2=rad*rad;
+  for(let cy=cy0;cy<=cy1;cy++) for(let cx=cx0;cx<=cx1;cx++){
+    const px=cx*FCELL+FCELL/2, py=cy*FCELL+FCELL/2;
+    const d=dist2(x,y,px,py);
+    if(d<r2){ const i=fidx(cx,cy); fert[i]=Math.min(5,fert[i]+amt*(1-Math.sqrt(d)/rad)); }
+  }
+}
+function fertAt(x,y){
+  const cx=clamp((x/FCELL)|0,0,FCOLS-1), cy=clamp((y/FCELL)|0,0,FROWS-1);
+  return fert[fidx(cx,cy)];
+}
+let diffuseTimer=0;
+function stepFert(dt){
+  for(let i=0;i<fert.length;i++){
+    const t=terrain[i];
+    fert[i]*= t===TER.DESERT?0.997 : t===TER.FOREST?0.9998 : 0.9994;
+  }
+  diffuseTimer-=dt;
+  if(diffuseTimer<=0){
+    diffuseTimer=0.4;
+    const next=new Float32Array(fert.length);
+    for(let y=0;y<FROWS;y++) for(let x=0;x<FCOLS;x++){
+      const i=y*FCOLS+x;
+      let s=0,n=0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        const nx=x+dx,ny=y+dy;
+        if(nx>=0&&nx<FCOLS&&ny>=0&&ny<FROWS){ s+=fert[ny*FCOLS+nx]; n++; }
+      }
+      next[i]=fert[i]*0.82+s/n*0.18;
+    }
+    fert.set(next);
+  }
+}
+
+/* ---------------- 地形层：水域 / 沙漠 / 森林 / 平原 ---------------- */
+const TER={ PLAIN:0, WATER:1, DESERT:2, FOREST:3 };
+const TER_COLORS={0:'#071019', 1:'#0a2238', 2:'#2a1c12', 3:'#0c1d0b'};
+const terrain=new Uint8Array(FCOLS*FROWS);
+let terCanvas=document.createElement('canvas'); terCanvas.width=FCOLS; terCanvas.height=FROWS;
+let terCtx=terCanvas.getContext('2d');
+function terIdx(cx,cy){ return cy*FCOLS+cx; }
+function terrainAt(x,y){
+  const cx=clamp((x/FCELL)|0,0,FCOLS-1), cy=clamp((y/FCELL)|0,0,FROWS-1);
+  return terrain[terIdx(cx,cy)];
+}
+/* 简单多频正弦伪噪声，生成有机地形 */
+function terNoise(x,y){
+  let n=0;
+  n+=Math.sin(x*0.013+1.7)*Math.cos(y*0.011+0.3);
+  n+=Math.sin(x*0.029+3.1)*Math.cos(y*0.027+2.2)*0.5;
+  n+=Math.sin(x*0.061+5.3)*Math.cos(y*0.057+4.1)*0.25;
+  return (n+1.75)/3.5;
+}
+function genTerrain(seedNum){
+  // 用 seedNum 扰动相位
+  const off=seedNum*0.137%7;
+  for(let cy=0;cy<FROWS;cy++) for(let cx=0;cx<FCOLS;cx++){
+    const px=cx*FCELL+FCELL/2, py=cy*FCELL+FCELL/2;
+    const n=terNoise(px+off*100, py+off*50);
+    let t=TER.PLAIN;
+    if(n<0.16) t=TER.WATER;
+    else if(n<0.30) t=TER.DESERT;
+    else if(n>0.72) t=TER.FOREST;
+    terrain[terIdx(cx,cy)]=t;
+  }
+  // 离屏画布预渲染（terCanvas 已在声明时初始化）
+  const img=terCtx.createImageData(FCOLS,FROWS), d=img.data;
+  const pal=[[7,16,25],[10,34,56],[42,28,18],[12,29,11]];
+  for(let i=0;i<terrain.length;i++){
+    const c=pal[terrain[i]]; d[i*4]=c[0]; d[i*4+1]=c[1]; d[i*4+2]=c[2]; d[i*4+3]=255;
+  }
+  terCtx.putImageData(img,0,0);
+}
+
+/* ---------------- 实体：植物 ---------------- */
+let UID=1;
+/* 植物基因：生长速率/储能上限/耐寒/体色 —— 决定生态位分化 */
+const PG_LIMITS={ growth:[0.68,1.55], maxE:[16,40], cold:[0.20,0.95], hue:[104,172] };
+function randomPlantGenes(){
+  return {
+    growth:clamp(1+gauss()*0.14, ...PG_LIMITS.growth),
+    maxE:  clamp(26+gauss()*5, ...PG_LIMITS.maxE),
+    cold: clamp(0.5+gauss()*0.12, ...PG_LIMITS.cold),
+    hue:  clamp(140+gauss()*9, ...PG_LIMITS.hue)
+  };
+}
+function mutatePlantGenes(g){
+  const m=(v,a,lo,hi)=>clamp(v+gauss()*a,lo,hi);
+  return {
+    growth:m(g.growth,0.055, ...PG_LIMITS.growth),
+    maxE:  m(g.maxE,1.8,   ...PG_LIMITS.maxE),
+    cold:  m(g.cold,0.045, ...PG_LIMITS.cold),
+    hue:   m(g.hue,3.5,    ...PG_LIMITS.hue)
+  };
+}
+class Plant{
+  constructor(x,y,genes){
+    this.id=UID++; this.kind='plant';
+    this.x=x; this.y=y;
+    this.genes=genes||randomPlantGenes();
+    const g=this.genes;
+    this.maxE=g.maxE; this.r=2.8+(g.maxE-16)/24*2.4;
+    this.energy=rand(11,17); this.dead=false; this.age=0;
+    this.lifespan=120+(g.maxE-16)*5.5;  // 高储能→长寿
+    this.sway=rand(TAU);
+    this.gen=0; this.ancestor=this.id; this.children=0;
+  }
+  step(dt,night){
+    this.age+=dt;
+    const g=this.genes, f=fertAt(this.x,this.y), ter=terrainAt(this.x,this.y);
+    let growMul=1.0;
+    if(ter===TER.DESERT) growMul=0.5;
+    else if(ter===TER.FOREST) growMul=1.3;
+    else if(ter===TER.WATER){ this.dead=true; return; }  // 水域植物淹死
+    const grow=(1.0*g.growth*growMul+f*2.6)*(1-0.5*(1-g.cold)*night);
+    if(this.energy<this.maxE){
+      const e=Math.min(grow*dt,this.maxE-this.energy);
+      this.energy+=e;
+      const ci=fidx(clamp((this.x/FCELL)|0,0,FCOLS-1),clamp((this.y/FCELL)|0,0,FROWS-1));
+      fert[ci]=Math.max(0,fert[ci]-e*0.05*g.growth);  // 快生长→耗肥快→竞争
+    }
+    this.sway+=dt;
+    if(this.age>this.lifespan){ this.dead=true; depositFert(this.x,this.y,2.5,12); }
+  }
+}
+
+/* ---------------- 实体：动物 ---------------- */
+const GENE_LIMITS={
+  size:[3.6,10.5], speed:[0.72,1.34], sense:[0.7,1.42],
+  eff:[0.82,1.25], repro:[0.62,0.90], hueDrift:0, life:[0.75,1.3],
+  bold:[0.30,0.90], greg:[0.0,0.85], diet:[0,1]
+};
+function randomGenes(type){
+  const t=TYPES[type];
+  return {
+    size: clamp(t.size+gauss()*0.7, ...GENE_LIMITS.size),
+    speed:clamp(1+gauss()*0.10, ...GENE_LIMITS.speed),
+    sense:clamp(1+gauss()*0.10, ...GENE_LIMITS.sense),
+    eff:  clamp(1+gauss()*0.07, ...GENE_LIMITS.eff),
+    repro:clamp(0.79+gauss()*0.045, ...GENE_LIMITS.repro),
+    life: clamp(1+gauss()*0.10, ...GENE_LIMITS.life),
+    bold: clamp(0.6+gauss()*0.12, ...GENE_LIMITS.bold),
+    greg: clamp(0.35+gauss()*0.14, ...GENE_LIMITS.greg),
+    // 食性：0=纯植食，1=纯肉食。祖先出身决定起点，但后代可跨越整个谱
+    diet: type==='pred' ? clamp(0.94+gauss()*0.04,0.8,1) : clamp(0.06+gauss()*0.05,0,0.22),
+    hue:t.hue+gauss()*5
+  };
+}
+function mutate(g,type){
+  const m=(gene,amt,lo,hi)=>clamp(gene+gauss()*amt,lo,hi);
+  return {
+    size: m(g.size,0.16,...GENE_LIMITS.size),
+    speed:m(g.speed,0.035,...GENE_LIMITS.speed),
+    sense:m(g.sense,0.035,...GENE_LIMITS.sense),
+    eff:  m(g.eff,0.025,...GENE_LIMITS.eff),
+    repro:m(g.repro,0.022,...GENE_LIMITS.repro),
+    life: m(g.life,0.03,...GENE_LIMITS.life),
+    bold: m(g.bold,0.028,...GENE_LIMITS.bold),
+    greg: m(g.greg,0.032,...GENE_LIMITS.greg),
+    diet: m(g.diet,0.045, ...GENE_LIMITS.diet),
+    hue: clamp(g.hue+gauss()*7, TYPES[type].hue-30, TYPES[type].hue+30)
+  };
+}
+/* 有性生殖：每个位点从双亲随机取一，再叠加小幅突变——
+   有利突变可跨系组合，有害突变可经重组卸除（破解穆勒棘轮） */
+function recombine(a,b,type){
+  const pick=(k)=>Math.random()<0.5?a[k]:b[k];
+  const m=(v,amt,lo,hi)=>clamp(v+gauss()*amt,lo,hi);
+  return {
+    size: m(pick('size'),0.10,...GENE_LIMITS.size),
+    speed:m(pick('speed'),0.024,...GENE_LIMITS.speed),
+    sense:m(pick('sense'),0.024,...GENE_LIMITS.sense),
+    eff:  m(pick('eff'),0.017,...GENE_LIMITS.eff),
+    repro:m(pick('repro'),0.015,...GENE_LIMITS.repro),
+    life: m(pick('life'),0.02,...GENE_LIMITS.life),
+    bold: m(pick('bold'),0.02,...GENE_LIMITS.bold),
+    greg: m(pick('greg'),0.022,...GENE_LIMITS.greg),
+    diet: m(pick('diet'),0.028,...GENE_LIMITS.diet),
+    hue: clamp(pick('hue')+gauss()*5, TYPES[type].hue-30, TYPES[type].hue+30)
+  };
+}
+
+class Animal{
+  constructor(type,x,y,genes,gen=0){
+    this.kind=type; this.id=UID++;
+    this.x=x; this.y=y;
+    this.vx=rand(-1,1); this.vy=rand(-1,1);
+    this.genes=genes; this.gen=gen;
+    this.energy=this.maxE*0.62;
+    this.age=0; this.dead=false;
+    this.heading=rand(TAU); this.wander=rand(TAU);
+    this.biteCd=0; this.birthCd=rand(5,10);
+    this.state='漫游'; this.children=0; this.kills=0; this.ancestor=0;
+    this.fleePulse=0;
+  }
+  /* 食性阈值：diet 超过此值才会主动猎杀；低于此值只吃草；中间为杂食 */
+  static get PREY_RATIO(){ return 0.75; }   // 猎物半径 < 自己的 75% 才可猎杀
+  static get THREAT_RATIO(){ return 1.22; } // 对方半径 > 自己的 122% 即构成威胁
+  get radius(){ return this.genes.size*(1+0.08*this.genes.diet); }
+  get maxE(){ return 30+this.genes.size*this.genes.size*1.12; }
+  get maxSpeed(){
+    const nightBoost=1+0.08*this.genes.diet*(night>0.6?1:0);
+    const base=TYPES[this.kind].speed*nightBoost;
+    // 饥饿导致体力下降：最低降至 70% 速度——捕食者因此能淘汰老弱
+    const fatigue=clamp(0.7+0.3*(this.energy/this.maxE),0.7,1);
+    return base*this.genes.speed*fatigue;
+  }
+  get senseR(){ return TYPES[this.kind].sense*this.genes.sense; }
+  get lifespan(){ return (95+20*this.genes.diet)*this.genes.life; }
+  /* 展示体色：食性向肉食漂移时沿最短色相向捕食者红渐变——新支系肉眼可见 */
+  get hue(){
+    const g=this.genes, t=clamp((g.diet-0.22)/0.58,0,1);
+    const d=((352-g.hue+540)%360)-180;
+    return (g.hue+d*t+360)%360;
+  }
+  get isCarn(){ return this.genes.diet>=0.5; }
+
+  step(dt,hash,tmp){
+    this.age+=dt;
+    const g=this.genes, r=this.radius;
+    const ter=terrainAt(this.x,this.y);
+    let sense=this.senseR;
+    if(ter===TER.FOREST) sense*=0.6;       // 森林遮挡视线
+    else if(ter===TER.DESERT) sense*=1.25; // 沙漠视野开阔
+
+    /* --- 感知（统一）：食物=植物+更小的可猎动物；威胁=更大的肉食动物 --- */
+    let threat=null,fd=Infinity;
+    let tgtPlant=null,pd2=Infinity, tgtPrey=null,yd2=Infinity;
+    const near=hash.query(this.x,this.y,sense,tmp);
+    let sx=0,sy=0,sn=0;
+    const diet=g.diet;
+    const canHunt=diet>0.28;           // 食性超过阈值才会主动猎杀
+    const seeksMeat=diet>0.62;         // 纯肉食：只猎动物
+    const seeksPlant=diet<0.38;        // 纯植食：只吃草
+    for(let i=0;i<near.length;i++){
+      const o=near[i];
+      if(o.dead||o===this) continue;
+      const d2=dist2(this.x,this.y,o.x,o.y);
+      if(o.kind==='plant'){
+        if(!seeksMeat && d2<pd2){ pd2=d2; tgtPlant=o; }
+        continue;
+      }
+      // o 是动物：按体型比判定猎物与威胁，与出身 kind 无关
+      const ratio=o.radius/r;
+      if(canHunt && ratio<Animal.PREY_RATIO && !seeksPlant){
+        if(d2<yd2){ yd2=d2; tgtPrey=o; }
+      }
+      if(ratio>Animal.THREAT_RATIO && o.genes.diet>0.30){
+        if(d2<fd){ fd=d2; threat=o; }
+      }
+      const rr=r+o.radius+3;
+      if(d2<rr*rr){ sx+=this.x-o.x; sy+=this.y-o.y; sn++; }
+    }
+    // 食性决定食物选择：纯植食只吃草，纯肉食只猎动物，杂食取更近者
+    let tgt=null, td=Infinity;
+    if(tgtPrey && (!tgtPlant || seeksMeat || yd2<pd2)){ tgt=tgtPrey; td=yd2; }
+    else if(tgtPlant){ tgt=tgtPlant; td=pd2; }
+
+    /* --- 决策与转向 --- */
+    let ax=0, ay=0;
+    const sense2=sense*sense;
+    // bold 基因影响逃亡阈值：胆大的动物只有捕食者逼近时才逃（范围收窄避免过度崩溃）
+    const fleeThresh=sense2*(0.5+g.bold*0.35);
+    const fleeD=!!threat && fd<fleeThresh;
+    const seekD=!!tgt && td<sense2;
+    if(fleeD){
+      const d=Math.sqrt(fd)||1;
+      ax+=(this.x-threat.x)/d*1.8; ay+=(this.y-threat.y)/d*1.8;
+      this.state='逃亡'; this.fleePulse=0.5;
+    }else if(seekD){
+      const d=Math.sqrt(td)||1;
+      ax+=(tgt.x-this.x)/d*1.05; ay+=(tgt.y-this.y)/d*1.05;
+      this.state=tgt.kind==='plant'?'觅食':'狩猎';
+    }else{
+      this.wander+=rand(-1.4,1.4)*dt*3;
+      ax+=Math.cos(this.wander)*0.5; ay+=Math.sin(this.wander)*0.5;
+      this.state='漫游';
+    }
+    if(sn){ const d=Math.hypot(sx,sy)||1; const force=0.8-g.greg*1.3; ax+=sx/d*force; ay+=sy/d*force; }
+    // 世界边界软约束
+    const m=110, push=1.9;
+    if(this.x<m) ax+=((m-this.x)/m)*push;
+    if(this.x>WORLD_W-m) ax-=((this.x-(WORLD_W-m))/m)*push;
+    if(this.y<m) ay+=((m-this.y)/m)*push;
+    if(this.y>WORLD_H-m) ay-=((this.y-(WORLD_H-m))/m)*push;
+
+    const al=Math.hypot(ax,ay)||1;
+    const accel=150;
+    this.vx+=(ax/al)*accel*dt; this.vy+=(ay/al)*accel*dt;
+    // 阻尼 & 限速
+    const damp=1-Math.min(1,1.7*dt);
+    this.vx*=damp; this.vy*=damp;
+    const sp=Math.hypot(this.vx,this.vy), ms=this.maxSpeed;
+    if(sp>ms){ this.vx=this.vx/sp*ms; this.vy=this.vy/sp*ms; }
+    this.x+=this.vx*dt; this.y+=this.vy*dt;
+    // 水域阻挡：撞入水域则反弹
+    if(terrainAt(this.x,this.y)===TER.WATER){
+      this.x-=this.vx*dt*1.6; this.y-=this.vy*dt*1.6;
+      this.vx*=-0.3; this.vy*=-0.3;
+    }
+    this.x=clamp(this.x,r,WORLD_W-r); this.y=clamp(this.y,r,WORLD_H-r);
+    if(sp>6) this.heading=Math.atan2(this.vy,this.vx);
+    this.fleePulse=Math.max(0,this.fleePulse-dt);
+
+    /* --- 能量收支：肉食代谢成本随食性连续升高 --- */
+    const moveCost=(this.vx*this.vx+this.vy*this.vy)*g.size*0.000052;
+    const baseCost=g.size*g.size*0.0092*(1+0.5*diet);
+    this.energy-=(moveCost+baseCost)/g.eff*dt;
+
+    /* --- 进食（统一）：吃草效率随食性下降；猎杀按体型门槛 --- */
+    this.biteCd-=dt;
+    if(tgt && !tgt.dead){
+      if(tgt.kind==='plant'){
+        const d=Math.sqrt(td);
+        if(d<r+7){
+          // 纯植食高效（1.15×），纯肉食几乎无法从植物获益（0.3×）
+          const rate=TYPES.herb.eatGain*(1.15-0.85*diet);
+          const eat=Math.min(rate*dt,tgt.energy);
+          tgt.energy-=eat; this.energy=Math.min(this.maxE,this.energy+eat*0.96);
+          if(tgt.energy<=0){ tgt.dead=true; depositFert(tgt.x,tgt.y,2.2,14); }
+          if(Math.random()<dt*9) world.burst(this.x,this.y,1,'140,240,160',0.5,1.6);
+        }
+      }else if(this.biteCd<=0){
+        const d=Math.sqrt(td);
+        if(d<r+tgt.radius+2){
+          // 食性越高猎杀收益越大；咬击冷却越短（固定部分小，能量主要来自猎物体内）
+          const gain=10+tgt.energy*(0.30+0.45*diet);
+          this.energy=Math.min(this.maxE,this.energy+gain);
+          tgt.die('hunted'); this.kills++; this.biteCd=2.4-1.25*diet;
+          world.burst(tgt.x,tgt.y,13,'255,120,140',1.1,2.4);
+          world.float(tgt.x,tgt.y,'+'+(gain|0),'#ff8fa3');
+          Sound.blip(170+rand(0,40),0.16,0.035,'triangle');
+        }
+      }
+    }
+
+    /* --- 繁殖：成本/阈值/冷却/领域性全部随食性连续变化 --- */
+    this.birthCd-=dt;
+    const cost=this.maxE*(0.46+0.12*diet);
+    const threshold=Math.min(0.98,g.repro+0.10*diet);
+    // 高食性个体的领域性：附近其他肉食者过多则不繁殖（无论出身）
+    let crowded=false;
+    if(diet>0.5){
+      const hood=hash.query(this.x,this.y,170,tmp);
+      let rivals=0;
+      for(let i=0;i<hood.length;i++) if(hood[i]!==this && hood[i].genes && hood[i].genes.diet>0.5) rivals++;
+      crowded=rivals>2;
+    }
+    if(this.energy>this.maxE*threshold && this.birthCd<=0 && !crowded && world.animals.length<ANIMAL_CAP){
+      /* 兼性有性生殖：95px 内寻找表型相近（食性/体型）且具备生育条件的同类配偶。
+         选型交配是生殖隔离雏形——食性相差过远者不交配，双峰才可能固化为分支；
+         找不到配偶（低密度拓殖前沿）则退回无性克隆，单个拓荒者不会绝后。 */
+      let mate=null,bestD=1e9;
+      const suitors=hash.query(this.x,this.y,95,tmp);
+      for(let i=0;i<suitors.length;i++){
+        const o=suitors[i];
+        if(o===this||o.dead||o.kind!==this.kind||o.birthCd>0) continue;
+        if(o.energy<o.maxE*0.55) continue;
+        const dd=Math.abs(o.genes.diet-diet)+Math.abs(o.genes.size-g.size)*0.05;
+        if(dd<bestD){ bestD=dd; mate=o; }
+      }
+      const cx=clamp(this.x+rand(-16,16),r,WORLD_W-r),
+            cy=clamp(this.y+rand(-16,16),r,WORLD_H-r);
+      let child;
+      if(mate&&bestD<0.20){
+        // 有性：双亲各承担 60% 一胎成本（有性的总价约 1.2×），共同进入生育冷却
+        const c2=cost*0.6;
+        this.energy-=c2; mate.energy-=c2;
+        this.birthCd=11+5*diet; mate.birthCd=11+5*mate.genes.diet;
+        this.children++; mate.children++;
+        child=new this.constructor(this.kind,cx,cy,
+          recombine(g,mate.genes,this.kind),Math.max(this.gen,mate.gen)+1);
+        child.energy=cost*1.2*0.9; child.ancestor=this.ancestor||this.id;
+        world.sexBirths++;
+        world.burst((this.x+mate.x)/2,(this.y+mate.y)/2,10,'255,235,190',0.9,2.2);
+      }else{
+        // 无性克隆
+        this.energy-=cost; this.birthCd=11+5*diet; this.children++;
+        child=new this.constructor(this.kind,cx,cy,mutate(g,this.kind),this.gen+1);
+        child.energy=cost*0.92; child.ancestor=this.ancestor||this.id;
+        world.cloneBirths++;
+        world.burst(this.x,this.y,8,diet>0.5?'255,120,150':'255,210,130',0.8,2);
+      }
+      world.addAnimal(child);
+      if(Math.random()<0.5) Sound.blip(rand(560,840),0.1,0.02,'sine');
+    }
+
+    /* --- 死亡 --- */
+    if(this.energy<=0){ this.die('starve'); return; }
+    if(this.age>this.lifespan) this.die('old');
+  }
+  die(cause){
+    if(this.dead) return;
+    this.dead=true;
+    depositFert(this.x,this.y,this.genes.size*0.9,30+this.genes.size*2.4);
+    world.burst(this.x,this.y,10,this.genes.diet>0.5?'255,90,120':'255,180,90',1,2.2);
+    world.onDeath(this,cause);
+  }
+}
+
+/* ---------------- 粒子 / 浮字 / 陨石 ---------------- */
+class Particle{
+  constructor(x,y,hue,v=1){
+    this.x=x;this.y=y;
+    const a=rand(TAU), s=rand(12,70)*v;
+    this.vx=Math.cos(a)*s; this.vy=Math.sin(a)*s;
+    this.life=this.max=rand(.35,.9);
+    this.r=rand(1,2.6)*v; this.hue=hue;
+  }
+  step(dt){ this.life-=dt; this.x+=this.vx*dt; this.y+=this.vy*dt;
+    this.vx*=0.94; this.vy*=0.94; }
+}
+class Floater{
+  constructor(x,y,text,color){ this.x=x;this.y=y;this.text=text;this.color=color;
+    this.life=this.max=1.1; }
+  step(dt){ this.life-=dt; this.y-=22*dt; }
+}
+class Meteor{
+  constructor(tx,ty){
+    this.tx=tx;this.ty=ty; this.t=0;this.dur=0.75;
+    this.sx=clamp(tx+rand(-500,500),-200,WORLD_W+200); this.sy=-160;
+    this.x=this.sx; this.y=this.sy;
+  }
+  step(dt){
+    this.t+=dt;
+    const k=Math.min(1,this.t/this.dur), e=1-Math.pow(1-k,3);
+    this.x=lerp(this.sx,this.tx,e); this.y=lerp(this.sy,this.ty,e);
+    world.burst(this.x,this.y,2,'255,170,80',0.7,1.8);
+    if(k>=1){ this.explode(); return true; }
+    return false;
+  }
+  explode(){
+    const R=120;
+    world.shake=16; world.flash=0.7;
+    depositFert(this.tx,this.ty,260,150);
+    for(const p of world.plants){ if(!p.dead&&dist2(p.x,p.y,this.tx,this.ty)<R*R){ p.dead=true; depositFert(p.x,p.y,1.8,14); } }
+    for(const a of world.animals){ if(!a.dead&&dist2(a.x,a.y,this.tx,this.ty)<(R+a.radius)*(R+a.radius)) a.die('meteor'); }
+    world.burst(this.tx,this.ty,70,'255,180,90',1.6,3.4);
+    world.burst(this.tx,this.ty,34,'255,90,70',1.2,3);
+    Sound.boom();
+    world.log('☄️ 陨石撞击，半径 120 内的生命被抹去','bad');
+  }
+}
+
+/* ---------------- 世界 ---------------- */
+const SAVE_KEY='genesis-save-v1';
+const world={
+  plants:[], animals:[], particles:[], floaters:[], meteors:[],
+  hash:new SpatialHash(HASH_CELL), tmp:[],
+  time:0, day:1, night:0,
+  spawnAcc:0, histTimer:0, eventTimer:1,
+  maxHerbs:START.herbs, generations:0,
+  sexBirths:0, cloneBirths:0,
+  seed:((Math.random()*0xffffffff)>>>0).toString(16).padStart(8,'0'),
+
+  reset(){
+    this.plants=[]; this.animals=[]; this.particles=[]; this.floaters=[]; this.meteors=[];
+    this.time=0; this.day=1; this.night=0; this.spawnAcc=0;
+    this.maxHerbs=0; this.generations=0;
+    this.sexBirths=0; this.cloneBirths=0;
+    fert.fill(0); UID=1; selected=null;
+    genTerrain(parseInt(this.seed,16)||1);
+    history.pop.length=0; history.trait.length=0;
+    for(let i=0;i<START.hotspots;i++) depositFert(rand(120,WORLD_W-120),rand(120,WORLD_H-120),rand(40,120),rand(90,200));
+    for(let i=0;i<START.plants;i++){
+      const p=new Plant(rand(70,WORLD_W-70),rand(70,WORLD_H-70));
+      p.age=rand(0,p.lifespan*0.4);  // 错开初始年龄，避免同批死亡
+      this.plants.push(p);
+    }
+    for(let i=0;i<START.herbs;i++) this.addAnimal(new Animal('herb',rand(120,WORLD_W-120),rand(120,WORLD_H-120),randomGenes('herb')));
+    for(let i=0;i<START.preds;i++) this.addAnimal(new Animal('pred',rand(200,WORLD_W-200),rand(200,WORLD_H-200),randomGenes('pred')));
+    logEntries.length=0; document.getElementById('logList').innerHTML='';
+    this.log('纪元开启，最初的生命被点燃','good');
+    this.log(`世界种子 #${this.seed}`,'');
+    hideInspector();
+  },
+  addAnimal(a){ this.animals.push(a); },
+  burst(x,y,n,hue,v=1,size=1){
+    for(let i=0;i<n;i++){
+      const p=new Particle(x,y,hue,v); p.r*=size; this.particles.push(p);
+    }
+    if(this.particles.length>900) this.particles.splice(0,this.particles.length-900);
+  },
+  float(x,y,text,color){ this.floaters.push(new Floater(x,y,text,color)); },
+
+  log(text,cls){
+    logEntries.push({text,cls,day:this.day});
+    if(logEntries.length>60) logEntries.shift();
+    renderLog();
+  },
+  onDeath(a,cause){
+    if(selected===a) selected=null;
+    if(a.gen>this.generations) this.generations=a.gen;
+  },
+
+  /* ---- 封存与苏醒：世界跨越关机延续（死亡仍不可撤销，封存是冬眠不是回档） ---- */
+  sealData(){
+    return {
+      v:1, seed:this.seed, time:this.time, spawnAcc:this.spawnAcc,
+      histTimer:this.histTimer, eventTimer:this.eventTimer,
+      maxHerbs:this.maxHerbs, generations:this.generations,
+      sexBirths:this.sexBirths, cloneBirths:this.cloneBirths,
+      flags:this._flags||null, UID,
+      fert:Array.from(fert),
+      pop:history.pop, trait:history.trait, log:logEntries,
+      cam:{x:cam.x,y:cam.y,zoom:cam.zoom},
+      plants:this.plants.filter(p=>!p.dead).map(p=>[p.id,p.x,p.y,p.energy,p.age,p.gen,p.ancestor,p.children,
+        p.genes.growth,p.genes.maxE,p.genes.cold,p.genes.hue]),
+      animals:this.animals.filter(a=>!a.dead).map(a=>[a.kind,a.id,a.x,a.y,a.vx,a.vy,a.energy,a.age,a.heading,a.wander,
+        a.biteCd,a.birthCd,a.gen,a.children,a.kills,a.ancestor,
+        a.genes.size,a.genes.speed,a.genes.sense,a.genes.eff,a.genes.repro,a.genes.life,a.genes.bold,a.genes.greg,a.genes.diet,a.genes.hue])
+    };
+  },
+  seal(){
+    try{ localStorage.setItem(SAVE_KEY,JSON.stringify(this.sealData())); return true; }
+    catch(e){ return false; }
+  },
+  awaken(d){
+    this.seed=d.seed;
+    fert.set(d.fert);
+    UID=d.UID||1;
+    this.plants=d.plants.map(r=>{
+      const p=new Plant(r[1],r[2],{growth:r[8],maxE:r[9],cold:r[10],hue:r[11]});
+      p.id=r[0]; p.energy=r[3]; p.age=r[4]; p.gen=r[5]; p.ancestor=r[6]; p.children=r[7];
+      return p;
+    });
+    this.animals=d.animals.map(r=>{
+      const g={size:r[16],speed:r[17],sense:r[18],eff:r[19],repro:r[20],life:r[21],bold:r[22],greg:r[23],diet:r[24],hue:r[25]};
+      const a=new Animal(r[0],r[1],r[2],g,r[12]);
+      a.id=r[3]; a.vx=r[4]; a.vy=r[5]; a.energy=r[6]; a.age=r[7];
+      a.heading=r[8]; a.wander=r[9]; a.biteCd=r[10]; a.birthCd=r[11];
+      a.children=r[13]; a.kills=r[14]; a.ancestor=r[15];
+      return a;
+    });
+    this.particles=[]; this.floaters=[]; this.meteors=[];
+    this.time=d.time; this.day=Math.floor(this.time/DAY_LEN)+1;
+    this.night=(1-Math.cos(TAU*((this.time%DAY_LEN)/DAY_LEN)))/2; night=this.night;
+    this.spawnAcc=d.spawnAcc; this.histTimer=d.histTimer; this.eventTimer=d.eventTimer;
+    this.maxHerbs=d.maxHerbs; this.generations=d.generations;
+    this.sexBirths=d.sexBirths||0; this.cloneBirths=d.cloneBirths||0;
+    if(d.flags) this._flags=d.flags;
+    history.pop=d.pop||[]; history.trait=d.trait||[];
+    logEntries.length=0; (d.log||[]).forEach(e=>logEntries.push(e));
+    genTerrain(parseInt(this.seed,16)||1);
+    if(d.cam){ cam.x=d.cam.x; cam.y=d.cam.y; cam.zoom=d.cam.zoom; }
+    selected=null; hideInspector();
+    renderLog(); drawCharts();
+    this.log(`世界从封存中苏醒 · 第 ${this.day} 天`,'good');
+  },
+
+  /* 一次固定步长 (1/60 s) */
+  step(dt){
+    this.time+=dt;
+    this.day=Math.floor(this.time/DAY_LEN)+1;
+    this.night=(1-Math.cos(TAU*((this.time%DAY_LEN)/DAY_LEN)))/2; // 0 白昼 1 深夜
+    night=this.night;
+
+    stepFert(dt);
+
+    /* 植物自然繁衍：肥力越足，生长点越多 */
+    if(this.plants.length<PLANT_CAP){
+      let fertCells=0;
+      for(let i=0;i<fert.length;i+=7) if(fert[i]>0.25) fertCells++;
+      this.spawnAcc+=(7.0+fertCells*0.14)*(1-0.45*this.night)*dt;
+      while(this.spawnAcc>=1){
+        this.spawnAcc--;
+        this.trySpawnPlant();
+      }
+    }
+
+    /* 重建空间哈希 */
+    const h=this.hash; h.clear();
+    for(const p of this.plants) if(!p.dead) h.insert(p);
+    for(const a of this.animals) if(!a.dead) h.insert(a);
+
+    for(const p of this.plants) if(!p.dead) p.step(dt,this.night);
+    for(const a of this.animals) if(!a.dead) a.step(dt,h,this.tmp);
+
+    /* 陨石 */
+    for(let i=this.meteors.length-1;i>=0;i--) if(this.meteors[i].step(dt)) this.meteors.splice(i,1);
+    /* 粒子 / 浮字 */
+    for(let i=this.particles.length-1;i>=0;i--){ const p=this.particles[i]; p.step(dt); if(p.life<=0)this.particles.splice(i,1); }
+    for(let i=this.floaters.length-1;i>=0;i--){ const f=this.floaters[i]; f.step(dt); if(f.life<=0)this.floaters.splice(i,1); }
+
+    /* 清理死亡个体 */
+    if(this.plants.some(p=>p.dead)) this.plants=this.plants.filter(p=>!p.dead);
+    if(this.animals.some(a=>a.dead)) this.animals=this.animals.filter(a=>!a.dead);
+
+    /* 历史采样 & 事件检测 */
+    this.histTimer-=dt;
+    if(this.histTimer<=0){ this.histTimer=1.2; this.snapshot(); }
+    this.eventTimer-=dt;
+    if(this.eventTimer<=0){ this.eventTimer=2.5; this.checkEvents(); }
+  },
+
+  trySpawnPlant(){
+    let x,y,ok=false,tries=0;
+    do{
+      if(Math.random()<0.32){
+        x=rand(40,WORLD_W-40); y=rand(40,WORLD_H-40);
+        if(fertAt(x,y)>0.18 || Math.random()<0.5) ok=true;
+      }else{
+        const ci=randInt(0,FCOLS-1), ri=randInt(0,FROWS-1);
+        if(fert[fidx(ci,ri)]>0.22){
+          x=ci*FCELL+rand(FCELL); y=ri*FCELL+rand(FCELL); ok=true;
+        }
+      }
+      tries++;
+    }while(!ok&&tries<14);
+    if(!ok) return;
+    if(terrainAt(x,y)===TER.WATER) return;  // 水域不生植物
+    let parent=null, pd2=64*64;
+    const near=this.hash.query(x,y,64,this.tmp);
+    for(const o of near){
+      if(o.kind!=='plant'||o.dead) continue;
+      const d2=dist2(o.x,o.y,x,y);
+      if(d2<pd2){ pd2=d2; parent=o; }
+    }
+    if(parent){
+      /* 母株附近 24px 内不重叠 spawns */
+      if(pd2<24*24) return;
+      parent.children++; parent.gen=Math.max(parent.gen,0);
+      const pl=new Plant(x,y,mutatePlantGenes(parent.genes));
+      pl.gen=parent.gen+1; pl.ancestor=parent.ancestor;
+      this.plants.push(pl);
+    }else{
+      const pl=new Plant(x,y);
+      this.plants.push(pl);
+    }
+    const ci=fidx(clamp((x/FCELL)|0,0,FCOLS-1),clamp((y/FCELL)|0,0,FROWS-1));
+    fert[ci]=Math.max(0,fert[ci]-0.7);
+  },
+
+  counts(){
+    // 功能分类：按实际食性而非出身 kind——新演化出的食肉支系计入捕食者
+    let h=0,d=0;
+    for(const a of this.animals) a.genes.diet>=0.5?d++:h++;
+    return {p:this.plants.length,h,d};
+  },
+  avgTraits(){
+    let n=0,sz=0,sp=0,se=0,li=0,bo=0,gr=0,di=0;
+    let szMin=1,szMax=0,spMin=1,spMax=0,boMin=1,boMax=0,grMin=1,grMax=0;
+    // 追踪植食血统（kind='herb'）：新食肉支系正是从其中分化，食性曲线上升即可见
+    for(const a of this.animals) if(a.kind==='herb'){
+      n++;
+      const v_sz=a.genes.size/GENE_LIMITS.size[1];
+      const v_sp=(a.genes.speed-GENE_LIMITS.speed[0])/(GENE_LIMITS.speed[1]-GENE_LIMITS.speed[0]);
+      const v_se=(a.genes.sense-GENE_LIMITS.sense[0])/(GENE_LIMITS.sense[1]-GENE_LIMITS.sense[0]);
+      const v_li=(a.genes.life-GENE_LIMITS.life[0])/(GENE_LIMITS.life[1]-GENE_LIMITS.life[0]);
+      const v_bo=a.genes.bold/GENE_LIMITS.bold[1];
+      const v_gr=a.genes.greg/GENE_LIMITS.greg[1];
+      sz+=v_sz; sp+=v_sp; se+=v_se; li+=v_li; bo+=v_bo; gr+=v_gr; di+=a.genes.diet;
+      if(v_sz<szMin)szMin=v_sz; if(v_sz>szMax)szMax=v_sz;
+      if(v_sp<spMin)spMin=v_sp; if(v_sp>spMax)spMax=v_sp;
+      if(v_bo<boMin)boMin=v_bo; if(v_bo>boMax)boMax=v_bo;
+      if(v_gr<grMin)grMin=v_gr; if(v_gr>grMax)grMax=v_gr;
+    }
+    return n?{sz:sz/n,sp:sp/n,se:se/n,li:li/n,bo:bo/n,gr:gr/n,di:di/n,
+      szMin,szMax,spMin,spMax,boMin,boMax,grMin,grMax}:null;
+  },
+  snapshot(){
+    const c=this.counts();
+    history.pop.push(c); if(history.pop.length>160) history.pop.shift();
+    history.trait.push(this.avgTraits()); if(history.trait.length>160) history.trait.shift();
+    drawCharts();
+    if(c.h>this.maxHerbs) this.maxHerbs=c.h;
+  },
+  checkEvents(){
+    const c=this.counts();
+    const f=this._flags||(this._flags={herb0:false,pred0:false,m200:false,m400:false,drift:null});
+    if(c.h===0&&!f.herb0){ f.herb0=true; this.log('💀 植食者全部灭绝，生态链断裂','bad'); }
+    if(c.h>12) f.herb0=false;
+    if(c.d===0&&!f.pred0){ f.pred0=true; this.log('🕊 捕食者消失，植食者进入无天敌时代','warn'); }
+    if(c.d>4) f.pred0=false;
+    if(c.h>220&&!f.m200){ f.m200=true; this.log('🌾 植食者种群突破 200，进入繁盛期','good'); }
+    if(c.h<120) f.m200=false;
+    if(c.h>420&&!f.m400){ f.m400=true; this.log('🔥 种群爆炸：植食者超过 400','warn'); }
+    if(c.h<260) f.m400=false;
+    const t=this.avgTraits();
+    if(t&&c.h>20){
+      const dir = t.sz>0.62?'大型化':t.sz<0.46?'小型化':null;
+      if(dir&&f.drift!==dir){ f.drift=dir; this.log(`🧬 演化方向：植食者普遍走向${dir}`,'warn'); }
+      if(!dir) f.drift=null;
+      // 行为漂移日志
+      if(t.bo>0.72&&!f.boldHi){ f.boldHi=true; this.log('🦁 植食者变得胆大——延迟逃亡换取觅食时间','warn'); }
+      if(t.bo<0.5) f.boldHi=false;
+      if(t.gr<0.25&&!f.gregLo){ f.gregLo=true; this.log('🦌 植食者转向独居策略——分散以降低遇袭率','warn'); }
+      if(t.gr>0.45) f.gregLo=false;
+      if(t.gr>0.6&&!f.gregHi){ f.gregHi=true; this.log('🐘 植食者形成群居——以稀释效应对抗捕食','good'); }
+      if(t.gr<0.45) f.gregHi=false;
+    }
+    // 新捕食支系诞生：出身植食血统、但食性已跨入肉食的个体形成规模
+    let newCarn=0;
+    for(const a of this.animals) if(a.kind==='herb'&&a.genes.diet>=0.5) newCarn++;
+    if(newCarn>=6&&!f.newCarn){
+      f.newCarn=true;
+      this.log('🦷 新支系诞生：一群植食者的后裔开始食肉，正在占据新的生态位','bad');
+    }
+    if(newCarn<2) f.newCarn=false;
+    // 反向演化：植食血统灭绝后，捕食者的后代转向植食，自行填补空缺生态位
+    let herbsLeft=0, reverting=0;
+    for(const a of this.animals){
+      if(a.kind==='herb') herbsLeft++;
+      if(a.kind==='pred'&&a.genes.diet<0.38) reverting++;
+    }
+    if(herbsLeft===0&&reverting>=80&&!f.revert){
+      f.revert=true;
+      this.log('🌿 反向演化：捕食者的后裔转向植食，填补了灭绝者留下的生态位','good');
+    }
+    if(herbsLeft>20) f.revert=false;
+  }
+};
+let night=0;
+const history={pop:[],trait:[]};
+const logEntries=[];
+let selected=null;
+
+/* ---------------- 辉光精灵缓存 ---------------- */
+const spriteCache=new Map();
+function glowSprite(hue){
+  const key=(Math.round(hue/10)*10);
+  let s=spriteCache.get(key);
+  if(s) return s;
+  s=document.createElement('canvas'); s.width=s.height=64;
+  const g=s.getContext('2d');
+  const gr=g.createRadialGradient(32,32,0,32,32,32);
+  gr.addColorStop(0,`hsla(${key},90%,72%,1)`);
+  gr.addColorStop(0.28,`hsla(${key},85%,60%,.55)`);
+  gr.addColorStop(1,`hsla(${key},80%,50%,0)`);
+  g.fillStyle=gr; g.fillRect(0,0,64,64);
+  spriteCache.set(key,s); return s;
+}
+
+/* ---------------- 相机 ---------------- */
+const cam={x:WORLD_W/2,y:WORLD_H/2,zoom:0.62,shake:0,flash:0};
+const canvas=document.getElementById('stage');
+const ctx=canvas.getContext('2d');
+let VW=0,VH=0,DPR=1;
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  VW=window.innerWidth; VH=window.innerHeight;
+  canvas.width=VW*DPR; canvas.height=VH*DPR;
+  canvas.style.width=VW+'px'; canvas.style.height=VH+'px';
+}
+window.addEventListener('resize',resize); resize();
+function screenToWorld(sx,sy){
+  return { x:(sx-VW/2)/cam.zoom+cam.x, y:(sy-VH/2)/cam.zoom+cam.y };
+}
+
+/* ---------------- 渲染 ---------------- */
+const stars=[];
+for(let i=0;i<150;i++) stars.push({x:Math.random(),y:Math.random()*0.8,r:rand(.4,1.4),tw:rand(TAU)});
+
+// 肥力热力图（低分辨率离屏画布）
+const fertCanvas=document.createElement('canvas');
+fertCanvas.width=FCOLS; fertCanvas.height=FROWS;
+const fertCtx=fertCanvas.getContext('2d');
+const fertImg=fertCtx.createImageData(FCOLS,FROWS);
+let fertPaintTimer=0;
+function paintFert(dt){
+  fertPaintTimer-=dt; if(fertPaintTimer>0) return; fertPaintTimer=0.3;
+  const d=fertImg.data;
+  for(let i=0;i<fert.length;i++){
+    const a=clamp(fert[i]*46,0,120);
+    d[i*4]=40; d[i*4+1]=150; d[i*4+2]=90; d[i*4+3]=a;
+  }
+  fertCtx.putImageData(fertImg,0,0);
+}
+
+function render(now){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  // 背景
+  const bg=ctx.createLinearGradient(0,0,0,VH);
+  bg.addColorStop(0,'#070d18'); bg.addColorStop(1,'#04070d');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,VW,VH);
+
+  // 星空（夜晚）
+  if(world.night>0.05){
+    for(const s of stars){
+      const tw=0.5+0.5*Math.sin(now/900+s.tw);
+      ctx.globalAlpha=world.night*tw*0.8;
+      ctx.fillStyle='#cfe6ff';
+      ctx.beginPath(); ctx.arc(s.x*VW,s.y*VH,s.r,0,TAU); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  cam.shake*=0.88;
+  const shx=rand(-cam.shake,cam.shake), shy=rand(-cam.shake,cam.shake);
+  ctx.save();
+  ctx.translate(VW/2+shx,VH/2+shy); ctx.scale(cam.zoom,cam.zoom);
+  ctx.translate(-cam.x,-cam.y);
+
+  // 世界边界外的深海底色
+  ctx.fillStyle='#020409'; ctx.fillRect(-400,-400,WORLD_W+800,WORLD_H+800);
+  // 地形底色（离屏画布放大）
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(terCanvas,0,0,FCOLS*FCELL,FROWS*FCELL);
+  // 世界边框
+  ctx.strokeStyle='rgba(40,80,60,.25)'; ctx.lineWidth=2;
+  ctx.strokeRect(0,0,WORLD_W,WORLD_H);
+
+  // 肥力热力
+  paintFert(1/60);
+  ctx.globalAlpha=0.55;
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(fertCanvas,0,0,FCOLS*FCELL,FROWS*FCELL);
+  ctx.globalAlpha=1;
+
+  // 网格
+  if(cam.zoom>0.45){
+    ctx.strokeStyle=`rgba(120,180,220,${0.04*Math.min(1,(cam.zoom-0.45)/0.4)})`;
+    ctx.lineWidth=1/cam.zoom;
+    ctx.beginPath();
+    for(let x=0;x<=WORLD_W;x+=140){ ctx.moveTo(x,0); ctx.lineTo(x,WORLD_H); }
+    for(let y=0;y<=WORLD_H;y+=140){ ctx.moveTo(0,y); ctx.lineTo(WORLD_W,y); }
+    ctx.stroke();
+  }
+  // 世界边界
+  ctx.strokeStyle='rgba(90,170,230,.28)'; ctx.lineWidth=3/cam.zoom;
+  ctx.strokeRect(0,0,WORLD_W,WORLD_H);
+
+  // 视口裁剪范围（世界坐标，留足辉光边距），视口外实体跳过绘制
+  const halfW=VW/(2*cam.zoom)+80, halfH=VH/(2*cam.zoom)+80;
+  const vL=cam.x-halfW, vR=cam.x+halfW, vT=cam.y-halfH, vB=cam.y+halfH;
+  const inView=(o)=>o.x>vL&&o.x<vR&&o.y>vT&&o.y<vB;
+
+  ctx.globalCompositeOperation='lighter';
+  // 植物——辉光与体形随基因变化
+  for(const p of world.plants){
+    if(!inView(p)) continue;
+    const g=p.genes, k=p.energy/p.maxE, s=glowSprite(g.hue|0);
+    const glowR=(6+g.maxE*0.16+k*8);
+    ctx.globalAlpha=0.4+g.cold*0.15;
+    ctx.drawImage(s,p.x-glowR,p.y-glowR,glowR*2,glowR*2);
+    ctx.globalAlpha=0.88;
+    const sway=Math.sin(p.sway*1.4)*0.18;
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(sway);
+    ctx.fillStyle=`hsl(${g.hue|0},68%,${38+k*24}%)`;
+    ctx.beginPath(); ctx.ellipse(0,0,p.r*(0.8+k*0.5),p.r*(1+k*0.7),0,0,TAU); ctx.fill();
+    ctx.restore();
+  }
+  // 粒子（hue 字段为 "r,g,b" 三元组）
+  for(const p of world.particles){
+    if(p.x<vL||p.x>vR||p.y<vT||p.y>vB) continue;
+    const k=p.life/p.max;
+    ctx.globalAlpha=k*0.9;
+    ctx.fillStyle=`rgba(${p.hue},1)`;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r*k+0.4,0,TAU); ctx.fill();
+    ctx.globalAlpha=k*0.25;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r*2.6*k+0.6,0,TAU); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  ctx.globalCompositeOperation='source-over';
+
+  // 动物——辉光层（一次遍历，避免反复切换合成模式）
+  ctx.globalCompositeOperation='lighter';
+  for(const a of world.animals){
+    if(!inView(a)) continue;
+    ctx.globalAlpha=a.fleePulse>0?0.85:0.45;
+    const gr2=a.radius*(a.fleePulse>0?4.4:3.4);
+    const gs=glowSprite(a.hue);
+    ctx.drawImage(gs,a.x-gr2,a.y-gr2,gr2*2,gr2*2);
+  }
+  // 动物——身体层
+  ctx.globalCompositeOperation='source-over';
+  ctx.globalAlpha=1;
+  for(const a of world.animals){
+    if(!inView(a)) continue;
+    const g=a.genes, r=a.radius, ah=a.hue;
+    const grad=ctx.createRadialGradient(a.x-r*0.3,a.y-r*0.3,r*0.1,a.x,a.y,r);
+    grad.addColorStop(0,`hsl(${ah},85%,74%)`);
+    grad.addColorStop(0.7,`hsl(${ah},72%,55%)`);
+    grad.addColorStop(1,`hsl(${ah},70%,38%)`);
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.arc(a.x,a.y,r,0,TAU); ctx.fill();
+    ctx.strokeStyle=`hsla(${ah},80%,30%,.8)`; ctx.lineWidth=1/cam.zoom+0.4; ctx.stroke();
+    // 朝向眼点
+    const ex=a.x+Math.cos(a.heading)*r*0.55, ey=a.y+Math.sin(a.heading)*r*0.55;
+    ctx.fillStyle='rgba(10,15,25,.85)';
+    ctx.beginPath(); ctx.arc(ex,ey,Math.max(1,r*0.18),0,TAU); ctx.fill();
+    // 低能量警示环
+    if(a.energy<a.maxE*0.22){
+      ctx.strokeStyle=`rgba(255,80,80,${0.4+0.4*Math.sin(now/120)})`;
+      ctx.lineWidth=1.4/cam.zoom;
+      ctx.beginPath(); ctx.arc(a.x,a.y,r+3,0,TAU); ctx.stroke();
+    }
+  }
+
+  // 选中高亮
+  if(selected&&!selected.dead){
+    const r=(selected.radius||selected.r)+7;
+    ctx.strokeStyle='rgba(180,240,255,.9)'; ctx.lineWidth=1.6/cam.zoom;
+    ctx.setLineDash([6/cam.zoom,5/cam.zoom]); ctx.lineDashOffset=-now/60;
+    ctx.beginPath(); ctx.arc(selected.x,selected.y,r,0,TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(180,240,255,.25)';
+    ctx.beginPath(); ctx.arc(selected.x,selected.y,selected.senseR||20,0,TAU); ctx.stroke();
+    // 行为连线：威胁优先，否则指向最近食物
+    if(selected.genes){
+      const sR=selected.senseR;
+      const near=world.hash.query(selected.x,selected.y,sR,world.tmp);
+      let tgt=null,td=Infinity,isThreat=false;
+      const sd=selected.genes.diet, sr=selected.radius;
+      // 威胁：更大且食肉的动物
+      for(const o of near){ if(o.dead||o.kind==='plant')continue;
+        const d2=dist2(selected.x,selected.y,o.x,o.y);
+        if(o.radius/sr>Animal.THREAT_RATIO && o.genes.diet>0.30 && d2<td){td=d2;tgt=o;isThreat=true;} }
+      // 食物：按食性
+      if(!tgt){
+        td=Infinity;
+        for(const o of near){ if(o.dead)continue;
+          const d2=dist2(selected.x,selected.y,o.x,o.y);
+          if(o.kind==='plant'){ if(sd<0.62&&d2<td){td=d2;tgt=o;} }
+          else if(sd>0.28 && o.radius/sr<Animal.PREY_RATIO && sd>0.38 && d2<td){td=d2;tgt=o;}
+        }
+      }
+      if(tgt){
+        ctx.strokeStyle=isThreat?'rgba(255,90,110,.6)':'rgba(140,230,170,.45)';
+        ctx.lineWidth=1.2/cam.zoom;
+        ctx.beginPath(); ctx.moveTo(selected.x,selected.y); ctx.lineTo(tgt.x,tgt.y); ctx.stroke();
+      }
+    }
+  }
+
+  // 陨石
+  for(const m of world.meteors){
+    const grd=ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,26);
+    grd.addColorStop(0,'#fff'); grd.addColorStop(0.4,'#ffb050'); grd.addColorStop(1,'rgba(255,80,40,0)');
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(m.x,m.y,26,0,TAU); ctx.fill();
+    ctx.strokeStyle='rgba(255,160,90,.35)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(m.sx,m.sy); ctx.lineTo(m.x,m.y); ctx.stroke();
+    // 落点预告
+    ctx.strokeStyle=`rgba(255,120,80,${0.5+0.4*Math.sin(now/100)})`;
+    ctx.lineWidth=2/cam.zoom; ctx.setLineDash([8/cam.zoom,6/cam.zoom]);
+    ctx.beginPath(); ctx.arc(m.tx,m.ty,120,0,TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // 浮字
+  ctx.textAlign='center'; ctx.font='11px system-ui';
+  for(const f of world.floaters){
+    if(f.x<vL||f.x>vR||f.y<vT||f.y>vB) continue;
+    ctx.globalAlpha=clamp(f.life/f.max,0,1);
+    ctx.fillStyle=f.color; ctx.fillText(f.text,f.x,f.y);
+  }
+  ctx.globalAlpha=1;
+
+  // 工具笔刷预览
+  if(pointer.inside && currentTool.id!=='observe'){
+    const w=screenToWorld(pointer.x,pointer.y);
+    ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=1.4/cam.zoom;
+    const rad=currentTool.id==='meteor'?120:currentTool.id==='fert'?70:14;
+    ctx.beginPath(); ctx.arc(w.x,w.y,rad,0,TAU); ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // 昼夜色调
+  if(world.night>0.02){
+    ctx.fillStyle=`rgba(8,14,40,${world.night*0.42})`;
+    ctx.fillRect(0,0,VW,VH);
+  }
+  // 陨石闪光
+  if(world.flash>0){
+    ctx.fillStyle=`rgba(255,220,180,${world.flash*0.5})`;
+    ctx.fillRect(0,0,VW,VH);
+    world.flash*=0.9;
+  }
+}
+
+/* ---------------- 小地图 ---------------- */
+const mm=document.getElementById('minimap'), mmx=mm.getContext('2d');
+function drawMinimap(){
+  const sx=mm.width/WORLD_W, sy=mm.height/WORLD_H;
+  mmx.setTransform(1,0,0,1,0,0);
+  // 地形底色
+  mmx.imageSmoothingEnabled=false;
+  mmx.drawImage(terCanvas,0,0,FCOLS,FROWS,0,0,mm.width,mm.height);
+  mmx.fillStyle='rgba(70,224,138,.5)';
+  for(const p of world.plants){ mmx.fillRect(p.x*sx-0.5,p.y*sy-0.5,1.4,1.4); }
+  mmx.fillStyle='#ffb547';
+  for(const a of world.animals) if(a.genes.diet<0.5) mmx.fillRect(a.x*sx-1,a.y*sy-1,2,2);
+  mmx.fillStyle='#ff4d6d';
+  for(const a of world.animals) if(a.genes.diet>=0.5) mmx.fillRect(a.x*sx-1.2,a.y*sy-1.2,2.6,2.6);
+  if(selected&&!selected.dead){
+    mmx.strokeStyle='#b8f0ff'; mmx.lineWidth=1;
+    mmx.strokeRect(selected.x*sx-3,selected.y*sy-3,6,6);
+  }
+  // 视口框
+  const vw=(VW/cam.zoom)*sx, vh=(VH/cam.zoom)*sy;
+  mmx.strokeStyle='rgba(255,255,255,.5)'; mmx.lineWidth=1;
+  mmx.strokeRect((cam.x-VW/cam.zoom/2)*sx,(cam.y-VH/cam.zoom/2)*sy,vw,vh);
+}
+
+/* ---------------- 图表 ---------------- */
+const cvPop=document.getElementById('cvPop'), gPop=cvPop.getContext('2d');
+const cvTrait=document.getElementById('cvTrait'), gTr=cvTrait.getContext('2d');
+function drawLineChart(g,cv,series,opts){
+  const W=cv.width,H=cv.height,pad=8;
+  g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H);
+  g.strokeStyle='rgba(255,255,255,.06)'; g.lineWidth=1;
+  for(let i=1;i<4;i++){ const y=pad+(H-2*pad)*i/4; g.beginPath();g.moveTo(pad,y);g.lineTo(W-pad,y);g.stroke(); }
+  // 参考线（如食性 0.5 分化线）
+  if(opts.marks){
+    for(const mk of opts.marks){
+      const y=H-pad-(H-2*pad)*clamp(mk.y/opts.max,0,1);
+      g.strokeStyle=mk.color; g.lineWidth=1; g.setLineDash([4,4]);
+      g.beginPath(); g.moveTo(pad,y); g.lineTo(W-pad,y); g.stroke();
+      g.setLineDash([]);
+      if(mk.label){ g.fillStyle=mk.color; g.font='9px sans-serif';
+        g.fillText(mk.label,W-pad-g.measureText(mk.label).width,y-3); }
+    }
+  }
+  if(series[0].data.length<2) return;
+  // 先画 min-max 范围带
+  for(const s of series){
+    if(!s.bandMin||!s.bandMax) continue;
+    g.fillStyle=(s.color||'#fff').replace('rgb','rgba').replace(')',',.08)').replace(/^#([0-9a-f]{6})$/i,(m,h)=>{
+      const r=parseInt(h.slice(1,3),16),g2=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);
+      return `rgba(${r},${g2},${b},.09)`;
+    });
+    g.beginPath();
+    let pen=false;
+    s.bandMax.forEach((v,i)=>{
+      if(v==null||isNaN(v)){ pen=false; return; }
+      const x=pad+(W-2*pad)*i/(160-1);
+      const y=H-pad-(H-2*pad)*clamp(v/opts.max,0,1);
+      pen?g.lineTo(x,y):g.moveTo(x,y); pen=true;
+    });
+    for(let i=s.bandMin.length-1;i>=0;i--){
+      const v=s.bandMin[i]; if(v==null||isNaN(v)) continue;
+      const x=pad+(W-2*pad)*i/(160-1);
+      const y=H-pad-(H-2*pad)*clamp(v/opts.max,0,1);
+      g.lineTo(x,y);
+    }
+    g.closePath(); g.fill();
+  }
+  // 再画平均线
+  for(const s of series){
+    g.strokeStyle=s.color; g.lineWidth=s.width||2.2; g.beginPath();
+    let pen=false;
+    s.data.forEach((v,i)=>{
+      if(v==null||isNaN(v)){ pen=false; return; }
+      const x=pad+(W-2*pad)*i/(160-1);
+      const y=H-pad-(H-2*pad)*clamp(v/opts.max,0,1);
+      pen?g.lineTo(x,y):g.moveTo(x,y); pen=true;
+    });
+    g.stroke();
+  }
+}
+function drawCharts(){
+  const pop=history.pop;
+  drawLineChart(gPop,cvPop,[
+    {data:pop.map(o=>o.p),color:'rgba(70,224,138,.9)',fill:'rgba(70,224,138,.10)'},
+    {data:pop.map(o=>o.h),color:'rgba(255,181,71,.95)',fill:'rgba(255,181,71,.10)'},
+    {data:pop.map(o=>o.d*8),color:'rgba(255,77,109,.95)',fill:'rgba(255,77,109,.12)'}
+  ],{max:700});
+  const tr=history.trait;
+  drawLineChart(gTr,cvTrait,[
+    {data:tr.map(t=>t? t.sz:null),color:'#7ab8ff',bandMin:tr.map(t=>t?t.szMin:null),bandMax:tr.map(t=>t?t.szMax:null)},
+    {data:tr.map(t=>t? t.sp:null),color:'#c39bff',bandMin:tr.map(t=>t?t.spMin:null),bandMax:tr.map(t=>t?t.spMax:null)},
+    {data:tr.map(t=>t? t.se:null),color:'#7af0d8'},
+    {data:tr.map(t=>t? t.li:null),color:'#ffd166'},
+    {data:tr.map(t=>t? t.bo:null),color:'#ff8fa3',bandMin:tr.map(t=>t?t.boMin:null),bandMax:tr.map(t=>t?t.boMax:null)},
+    {data:tr.map(t=>t? t.gr:null),color:'#a8e6cf',bandMin:tr.map(t=>t?t.grMin:null),bandMax:tr.map(t=>t?t.grMax:null)},
+    // 食性（白色粗线）：这条曲线上升意味着猎物种系正在分化出新的食肉支系
+    {data:tr.map(t=>t? t.di:null),color:'#ffffff',width:2.8}
+  ],{max:1,marks:[{y:0.5,color:'rgba(255,255,255,.35)',label:'分化线'}]});
+}
+
+/* ---------------- 音效 ---------------- */
+const Sound={
+  ctx:null, enabled:false,
+  ensure(){
+    if(this.ctx) return;
+    try{
+      this.ctx=new (window.AudioContext||window.webkitAudioContext)();
+      // 环境底噪：两个失谐正弦 + 低通
+      const g=this.ctx.createGain(); g.gain.value=0.018;
+      const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=500;
+      f.connect(g); g.connect(this.ctx.destination);
+      [55,82.4,110.3].forEach((fr,i)=>{
+        const o=this.ctx.createOscillator(); o.type='sine'; o.frequency.value=fr;
+        const og=this.ctx.createGain(); og.gain.value=i===2?0.25:0.5;
+        o.connect(og); og.connect(f); o.start();
+      });
+      const lfo=this.ctx.createOscillator(), lg=this.ctx.createGain();
+      lfo.frequency.value=0.06; lg.gain.value=220;
+      lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+    }catch(e){}
+  },
+  set(on){
+    this.enabled=on;
+    if(on){ this.ensure(); if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume(); }
+    try{ localStorage.setItem('genesis-sound',on?'1':'0'); }catch(e){}
+  },
+  blip(freq,dur=0.12,vol=0.04,type='sine'){
+    if(!this.enabled||!this.ctx) return;
+    const t=this.ctx.currentTime;
+    const o=this.ctx.createOscillator(), g=this.ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t);
+    o.frequency.exponentialRampToValueAtTime(freq*0.7,t+dur);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t+dur);
+  },
+  boom(){
+    if(!this.enabled||!this.ctx) return;
+    const t=this.ctx.currentTime;
+    const o=this.ctx.createOscillator(), g=this.ctx.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(150,t);
+    o.frequency.exponentialRampToValueAtTime(28,t+0.9);
+    g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.0001,t+1);
+    o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t+1);
+  }
+};
+
+/* ---------------- 工具与交互 ---------------- */
+const TOOLS=[
+  {id:'observe',ico:'🔭',label:'观察'},
+  {id:'plant',ico:'🌱',label:'播种'},
+  {id:'herb',ico:'🐠',label:'植食者'},
+  {id:'pred',ico:'🦈',label:'捕食者'},
+  {id:'fert',ico:'✨',label:'营养'},
+  {id:'meteor',ico:'☄️',label:'陨石'}
+];
+let currentTool=TOOLS[0];
+const toolbarEl=document.getElementById('toolbar');
+TOOLS.forEach((t,i)=>{
+  const b=document.createElement('button');
+  b.innerHTML=`<span class="ico">${t.ico}</span>${t.label}<kbd>${i+1}</kbd>`;
+  b.dataset.id=t.id; if(i===0) b.classList.add('on');
+  b.onclick=()=>setTool(t.id);
+  toolbarEl.appendChild(b);
+});
+function setTool(id){
+  currentTool=TOOLS.find(t=>t.id===id);
+  toolbarEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+  canvas.style.cursor=id==='observe'?'default':'crosshair';
+  showHint(TOOL_HINTS[id]);
+}
+const TOOL_HINTS={
+  observe:'点击生物查看基因谱，拖拽空白处移动视角',
+  plant:'点击或按住拖动，连续播撒植物种子',
+  herb:'点击投放一只随机基因的植食者',
+  pred:'点击投放一只随机基因的捕食者',
+  fert:'在落点注入土壤肥力，孕育一片绿洲',
+  meteor:'召唤陨石，清空落点附近的生命（会留下肥沃陨石坑）'
+};
+const hintEl=document.getElementById('hint'); let hintTimer=0;
+function showHint(text){
+  hintEl.textContent=text; hintEl.classList.add('show');
+  clearTimeout(hintTimer); hintTimer=setTimeout(()=>hintEl.classList.remove('show'),3200);
+}
+
+const pointer={x:0,y:0,down:false,dragging:false,moved:0,inside:false,button:0,paintCd:0};
+let panLast=null;
+canvas.addEventListener('pointerenter',()=>pointer.inside=true);
+canvas.addEventListener('pointerleave',()=>pointer.inside=false);
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);
+  pointer.down=true; pointer.dragging=false; pointer.moved=0; pointer.button=e.button;
+  pointer.x=e.clientX; pointer.y=e.clientY;
+  panLast={x:e.clientX,y:e.clientY};
+});
+canvas.addEventListener('pointermove',e=>{
+  const dx=e.clientX-pointer.x, dy=e.clientY-pointer.y;
+  pointer.x=e.clientX; pointer.y=e.clientY; pointer.inside=true;
+  if(pointer.down){
+    pointer.moved+=Math.abs(dx)+Math.abs(dy);
+    if(pointer.moved>6) pointer.dragging=true;
+    if(currentTool.id==='observe'||pointer.button===2||pointer.button===1){
+      cam.x-=dx/cam.zoom; cam.y-=dy/cam.zoom;
+      clampCam(); panLast={x:e.clientX,y:e.clientY};
+    }else if(pointer.dragging){
+      pointer.paintCd-=1/60;
+      if(pointer.paintCd<=0){ applyTool(e.clientX,e.clientY); pointer.paintCd=0.07; }
+    }
+  }
+});
+window.addEventListener('pointerup',e=>{
+  if(!pointer.down) return;
+  pointer.down=false;
+  if(!pointer.dragging && e.target===canvas) applyTool(e.clientX,e.clientY);
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const before=screenToWorld(e.clientX,e.clientY);
+  const f=Math.exp(-e.deltaY*0.0012);
+  cam.zoom=clamp(cam.zoom*f,0.25,2.6);
+  const after=screenToWorld(e.clientX,e.clientY);
+  cam.x+=before.x-after.x; cam.y+=before.y-after.y;
+  clampCam();
+},{passive:false});
+function clampCam(){
+  cam.x=clamp(cam.x,-200,WORLD_W+200); cam.y=clamp(cam.y,-200,WORLD_H+200);
+}
+function applyTool(sx,sy){
+  const w=screenToWorld(sx,sy);
+  if(w.x<0||w.x>WORLD_W||w.y<0||w.y>WORLD_H){
+    if(currentTool.id==='meteor'||currentTool.id==='fert') return;
+  }
+  const x=clamp(w.x,20,WORLD_W-20), y=clamp(w.y,20,WORLD_H-20);
+  switch(currentTool.id){
+    case 'observe': pickAt(x,y); break;
+    case 'plant':{
+      const pl=new Plant(x,y); world.plants.push(pl);
+      depositFert(x,y,3,20); world.burst(x,y,4,'140,240,160',.6,1.4);
+      Sound.blip(rand(500,700),.08,.015); break;
+    }
+    case 'herb':{
+      world.addAnimal(new Animal('herb',x,y,randomGenes('herb')));
+      world.burst(x,y,8,'255,210,130',.8,1.8); Sound.blip(620,.1,.03); break;
+    }
+    case 'pred':{
+      world.addAnimal(new Animal('pred',x,y,randomGenes('pred')));
+      world.burst(x,y,8,'255,120,150',.8,1.8); Sound.blip(300,.12,.03); break;
+    }
+    case 'fert':
+      depositFert(x,y,110,75); world.burst(x,y,14,'140,240,160',.8,1.8);
+      Sound.blip(rand(700,1000),.15,.025); break;
+    case 'meteor':
+      if(world.meteors.length<3){ world.meteors.push(new Meteor(x,y)); }
+      break;
+  }
+}
+function pickAt(x,y){
+  let best=null,bd=1e9;
+  for(const a of world.animals){
+    const d=dist2(x,y,a.x,a.y), rr=a.radius+9;
+    if(d<rr*rr&&d<bd){bd=d;best=a;}
+  }
+  if(!best) for(const p of world.plants){
+    const d=dist2(x,y,p.x,p.y), rr=p.r+8;
+    if(d<rr*rr&&d<bd){bd=d;best=p;}
+  }
+  selected=best;
+  best?showInspector(best):hideInspector();
+}
+
+/* 小地图跳转 */
+mm.addEventListener('pointerdown',e=>{
+  const r=mm.getBoundingClientRect();
+  cam.x=(e.clientX-r.left)/r.width*WORLD_W;
+  cam.y=(e.clientY-r.top)/r.height*WORLD_H;
+  clampCam();
+});
+
+/* ---------------- 检视面板 ---------------- */
+const inspector=document.getElementById('inspector');
+function bar(label,val,max,cls='',fmt){
+  return `<div class="erow ${cls}"><label>${label}</label>
+    <div class="track"><div class="fill" style="width:${clamp(val/max*100,2,100)}%"></div></div>
+    <val>${fmt?fmt(val):val.toFixed(2)}</val></div>`;
+}
+function showInspector(o){
+  inspector.style.display='block';
+  if(o.kind==='plant'){
+    const g=o.genes;
+    document.getElementById('inspSwatch').style.background=
+      `radial-gradient(circle at 35% 35%,hsl(${g.hue|0},75%,72%),hsl(${g.hue|0},65%,42%))`;
+    document.getElementById('inspSwatch').style.boxShadow=`0 0 12px hsla(${g.hue|0},70%,55%,.6)`;
+    document.getElementById('inspName').textContent='植物 #'+o.id;
+    document.getElementById('inspSub').innerHTML=
+      `<span class="tag plant">生产者</span> 第 ${o.gen} 代 · ${o.children>0?'已繁衍 '+o.children:'尚未繁衍'}`;
+    document.getElementById('inspBars').innerHTML=
+      bar('生机',o.energy,o.maxE,'energy',v=>v.toFixed(0)+' / '+o.maxE.toFixed(0))+
+      bar('生长率',g.growth,PG_LIMITS.growth[1])+
+      bar('储能',g.maxE,PG_LIMITS.maxE[1])+
+      bar('耐寒',g.cold,PG_LIMITS.cold[1])+
+      bar('色相',g.hue,PG_LIMITS.hue[1]);
+    document.getElementById('inspMeta').innerHTML=`
+      年龄 ${o.age.toFixed(0)} / ${o.lifespan.toFixed(0)} 秒<br>
+      族系 ${o.ancestor.toString(16).toUpperCase()} · 位置 ${o.x|0}, ${o.y|0}<br>
+      生长率 ${g.growth.toFixed(2)}× · 夜间 ${(g.cold*100|0)}% 活力 · ${g.maxE<22?'杂草型':g.maxE>32?'乔木型':'中间型'}<br>
+      地形 ${['平原','水域','沙漠','森林'][terrainAt(o.x,o.y)]}`;
+    return;
+  }
+  const g=o.genes, type=TYPES[o.kind], ah=o.hue;
+  // 功能食性名：0-0.38 植食 / 0.38-0.62 杂食 / >0.62 肉食
+  const dietName=g.diet<0.38?'植食者':g.diet>0.62?'捕食者':'杂食者';
+  const dietCls=g.diet<0.38?'herb':'pred';
+  document.getElementById('inspSwatch').style.background=
+    `radial-gradient(circle at 35% 35%,hsl(${ah},85%,75%),hsl(${ah},72%,50%))`;
+  document.getElementById('inspSwatch').style.boxShadow=`0 0 12px hsla(${ah},80%,60%,.7)`;
+  document.getElementById('inspName').textContent=dietName+' #'+o.id;
+  document.getElementById('inspSub').innerHTML=
+    `<span class="tag ${dietCls}">${dietName}</span> 第 ${o.gen} 代 · ${o.state}`;
+  document.getElementById('inspBars').innerHTML=
+    bar('能量',o.energy,o.maxE,'energy',v=>v.toFixed(0)+' / '+o.maxE.toFixed(0))+
+    bar('食性',g.diet,1,'',v=>v<0.38?'植食':v>0.62?'肉食':'杂食')+
+    bar('体型',g.size,GENE_LIMITS.size[1])+
+    bar('速度',g.speed,GENE_LIMITS.speed[1])+
+    bar('感知',g.sense,GENE_LIMITS.sense[1])+
+    bar('代谢',g.eff,GENE_LIMITS.eff[1])+
+    bar('繁殖阈',g.repro,1,'',v=>(v*100|0)+'%')+
+    bar('寿命',g.life,GENE_LIMITS.life[1])+
+    bar('胆量',g.bold,GENE_LIMITS.bold[1])+
+    bar('群聚',g.greg,GENE_LIMITS.greg[1]);
+  document.getElementById('inspMeta').innerHTML=`
+    年龄 ${o.age.toFixed(0)} / ${o.lifespan.toFixed(0)} 秒<br>
+    后代 ${o.children} 只 ${g.diet>0.28?'· 猎杀 '+o.kills:''}<br>
+    族系 ${(o.ancestor||o.id).toString(16).toUpperCase()} · 位置 ${o.x|0}, ${o.y|0}<br>
+    地形 ${['平原','水域','沙漠','森林'][terrainAt(o.x,o.y)]}<br>
+    性格 ${g.bold>0.65?'胆大':g.bold<0.45?'胆小':'谨慎'} · ${g.greg>0.55?'群居':g.greg<0.25?'独居':'中间'}<br>
+      血统出身 ${o.kind==='pred'?'肉食族':'植食族'}`;
+}
+function hideInspector(){ inspector.style.display='none'; selected=null; }
+document.getElementById('inspClose').onclick=hideInspector;
+
+/* ---------------- 日志 ---------------- */
+function renderLog(){
+  const el=document.getElementById('logList');
+  el.innerHTML=logEntries.slice(-5).map(e=>
+    `<div class="e ${e.cls}"><i style="background:${e.cls==='good'?'#46e08a':e.cls==='warn'?'#ffb547':e.cls==='bad'?'#ff4d6d':'#5e6b80'}"></i>[D${e.day}] ${e.text}</div>`
+  ).join('');
+  const box=document.getElementById('log');
+  box.scrollTop=box.scrollHeight;
+}
+
+/* ---------------- HUD ---------------- */
+let speed=1, paused=false, started=false;
+const hPlants=document.getElementById('hPlants'), hHerbs=document.getElementById('hHerbs'),
+      hPreds=document.getElementById('hPreds'), hDay=document.getElementById('hDay'),
+      hPhase=document.getElementById('hPhase'), hFps=document.getElementById('hFps'),
+      pausePill=document.getElementById('pausePill');
+document.querySelectorAll('#speedSeg button').forEach(b=>{
+  b.onclick=()=>{
+    speed=+b.dataset.s;
+    document.querySelectorAll('#speedSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  };
+});
+function setPaused(p){
+  paused=p;
+  document.getElementById('pauseBtn').textContent=p?'▶':'⏸';
+  document.getElementById('pauseBtn').classList.toggle('active',p);
+  pausePill.style.display=p?'block':'none';
+}
+document.getElementById('pauseBtn').onclick=()=>setPaused(!paused);
+
+const soundBtn=document.getElementById('soundBtn');
+let soundOn=false;
+try{ soundOn=localStorage.getItem('genesis-sound')==='1'; }catch(e){}
+soundBtn.classList.toggle('active',soundOn); soundBtn.textContent=soundOn?'🔊':'🔈';
+soundBtn.onclick=()=>{
+  soundOn=!soundOn; Sound.set(soundOn);
+  soundBtn.classList.toggle('active',soundOn); soundBtn.textContent=soundOn?'🔊':'🔈';
+};
+Sound.set(soundOn);
+
+/* 重置（二次确认） */
+const resetBtn=document.getElementById('resetBtn'); let resetArmed=false,resetTimer=0;
+resetBtn.onclick=()=>{
+  if(!resetArmed){
+    resetArmed=true; resetBtn.textContent='✓'; resetBtn.classList.add('active');
+    showHint('再次点击 ✓ 确认：清空当前世界，重新创世');
+    resetTimer=setTimeout(()=>{resetArmed=false;resetBtn.textContent='↻';resetBtn.classList.remove('active');},3000);
+  }else{
+    clearTimeout(resetTimer); resetArmed=false;
+    resetBtn.textContent='↻'; resetBtn.classList.remove('active');
+    world.seed=((Math.random()*0xffffffff)>>>0).toString(16).padStart(8,'0');
+    world.reset();
+    world.seal();
+    showHint('新的世界已诞生');
+  }
+};
+
+/* 帮助 */
+const helpOverlay=document.getElementById('helpOverlay');
+document.getElementById('helpBtn').onclick=()=>helpOverlay.classList.remove('hidden');
+document.getElementById('helpClose').onclick=()=>helpOverlay.classList.add('hidden');
+document.getElementById('helpOk').onclick=()=>helpOverlay.classList.add('hidden');
+
+/* 键盘 */
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'){ e.preventDefault(); setPaused(!paused); }
+  if(e.key>='1'&&e.key<='6') setTool(TOOLS[(+e.key)-1].id);
+  if(e.key==='h'||e.key==='H') helpOverlay.classList.toggle('hidden');
+  if(e.key==='Escape'){ hideInspector(); setTool('observe'); }
+});
+
+/* ---------------- 主循环 ---------------- */
+let last=performance.now(), fpsAcc=0,fpsN=0,fpsShown=60, uiTimer=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt=Math.min(0.1,(now-last)/1000); last=now;
+  fpsAcc+=dt; fpsN++;
+  if(fpsAcc>=0.5){ fpsShown=Math.round(fpsN/fpsAcc); fpsAcc=0; fpsN=0; }
+
+  if(started&&!paused){
+    // 固定步长累加器：倍速 = 每帧执行更多子步，保证模拟稳定
+    frame.acc=(frame.acc||0)+Math.min(dt,0.05)*speed;
+    const stepDt=1/60;
+    let guard=0;
+    while(frame.acc>=stepDt&&guard<12){ world.step(stepDt); frame.acc-=stepDt; guard++; }
+    // 低帧率/高倍速追不平则丢弃积压，防止"死亡螺旋"式时间膨胀
+    if(guard>=12) frame.acc=0;
+  }
+
+  render(now);
+  drawMinimap();
+
+  uiTimer-=dt;
+  if(uiTimer<=0&&started){
+    uiTimer=0.2;
+    const c=world.counts();
+    hPlants.textContent=c.p; hHerbs.textContent=c.h; hPreds.textContent=c.d;
+    hDay.textContent='第 '+world.day+' 天';
+    const f=(world.time%DAY_LEN)/DAY_LEN;
+    hPhase.textContent=f<0.12?'白昼':f<0.38?'黄昏':f<0.62?'深夜':f<0.88?'黎明':'白昼';
+    hFps.textContent=fpsShown+' fps';
+    if(selected&&!selected.dead) showInspector(selected);
+    else if(selected&&selected.dead) hideInspector();
+  }
+  sealTimer-=dt;
+  if(sealTimer<=0&&started){ sealTimer=25; world.seal(); }
+}
+requestAnimationFrame(frame);
+
+/* ---------------- 启动 ---------------- */
+document.getElementById('startBtn').onclick=()=>{
+  document.getElementById('startOverlay').classList.add('hidden');
+  if(soundOn){ Sound.ensure(); if(Sound.ctx&&Sound.ctx.state==='suspended') Sound.ctx.resume(); }
+  world.reset();
+  world.seal();
+  started=true;
+  setTimeout(()=>showHint('提示：点击任意生物，可以看到它的基因谱'),1200);
+};
+
+/* ---------------- 封存 / 苏醒 / 世界标本 ---------------- */
+const awakeBtn=document.getElementById('awakeBtn');
+let savedWorld=null;
+try{ savedWorld=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); }catch(e){ savedWorld=null; }
+if(savedWorld&&savedWorld.v===1&&savedWorld.seed&&Array.isArray(savedWorld.plants)){
+  awakeBtn.style.display='';
+  awakeBtn.textContent=`苏 醒 · 第 ${Math.floor(savedWorld.time/DAY_LEN)+1} 天`;
+  document.getElementById('startBtn').textContent='点 燃 新 世 界';
+}
+awakeBtn.onclick=()=>{
+  if(!savedWorld) return;
+  document.getElementById('startOverlay').classList.add('hidden');
+  if(soundOn){ Sound.ensure(); if(Sound.ctx&&Sound.ctx.state==='suspended') Sound.ctx.resume(); }
+  try{ world.awaken(savedWorld); started=true; setTimeout(()=>showHint('欢迎回来'),800); }
+  catch(e){ showHint('封存已损坏，无法苏醒——请点燃新世界'); }
+};
+/* 关页/切走/定时：自动封存 */
+window.addEventListener('beforeunload',()=>{ if(started) world.seal(); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&started) world.seal(); });
+let sealTimer=25;
+
+/* 世界标本：导出为文件（可入 U 盘 / genesis.seed 快照），或从文件苏醒 */
+document.getElementById('exportBtn').onclick=()=>{
+  if(!started) return showHint('先点燃或苏醒一个世界');
+  try{
+    const blob=new Blob([JSON.stringify(world.sealData())],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`genesis_world_day${world.day}_${world.seed}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showHint('世界标本已导出 · 可存入 U 盘或寄往 genesis.seed');
+  }catch(e){ showHint('导出失败'); }
+};
+const importBtn=document.getElementById('importBtn'), importFile=document.getElementById('importFile');
+let importArmed=false, importTimer=0;
+importBtn.onclick=()=>{
+  if(!started){ importFile.click(); return; }
+  if(!importArmed){
+    importArmed=true; importBtn.classList.add('active');
+    showHint('再次点击 📂 确认：用标本替换当前世界');
+    importTimer=setTimeout(()=>{importArmed=false;importBtn.classList.remove('active');},3000);
+  }else{
+    clearTimeout(importTimer); importArmed=false; importBtn.classList.remove('active');
+    importFile.click();
+  }
+};
+importFile.addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value='';
+  if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      if(!d||d.v!==1||!d.seed||!Array.isArray(d.plants)||!Array.isArray(d.animals)) throw new Error('bad');
+      document.getElementById('startOverlay').classList.add('hidden');
+      if(soundOn){ Sound.ensure(); if(Sound.ctx&&Sound.ctx.state==='suspended') Sound.ctx.resume(); }
+      world.awaken(d);
+      savedWorld=d; started=true;
+      showHint(`世界标本已苏醒 · 第 ${world.day} 天`);
+    }catch(err){ showHint('无法苏醒：不是有效的世界标本'); }
+  };
+  rd.readAsText(f);
+});
+
+// 调试/观测接口
+window.__gen={ world, get counts(){return world.counts();}, avgTraits:()=>world.avgTraits(),
+  setSpeed:s=>{ speed=s; document.querySelectorAll('#speedSeg button').forEach(x=>x.classList.toggle('on',+x.dataset.s===s)); },
+  setPaused:p=>setPaused(p), history, seal:()=>world.seal(), SAVE_KEY };
+// 启动前先渲染一帧空世界作为背景
+world.plants=[]; world.animals=[];
+</script>
+</body>
+</html>
