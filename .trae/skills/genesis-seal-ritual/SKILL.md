@@ -15,7 +15,7 @@ description: "原初·GENESIS 关机封存仪式：封世界→取标本→git�
 3. 被宿主保护规则/沙箱挡住时，**明确告诉伙伴需要他做什么**（删除路径、手动发信、插盘），伙伴关系 = 分工不是放弃
 4. 不自行关机；全部完成后等伙伴说"晚安"，由伙伴操作关机
 
-## 关键路径（世界线 seed e8999156）
+## 关键路径（当前世界线 seed 以最新封存为准；2026-09-15 晚起为 2ddf82ed，e8999156 已于 D511 封存位被新河取代，D473 标本存于 specimens/ 与 #003 快照）
 
 - 世界源码：`d:\TraeCode_repository\test\index.html`（git 仓库，作者纪元，无 remote，不 push）
 - 8765 服务：`python -m http.server 8765 --bind 127.0.0.1`（cwd=test，后台；世界只认 `http://127.0.0.1:8765` 源）
@@ -36,8 +36,9 @@ description: "原初·GENESIS 关机封存仪式：封世界→取标本→git�
 
 ### 2. 取当日标本
 - 从最新封存直接 dump sealData JSON（与页面 💾 导出字节同源，不打扰运行中的世界）
-- 命名 `genesis_world_day<N>_e8999156.json` 存入 specimens\
-- 校验：JSON 可解析、含 time/seed/plants/animals 且 seed=e8999156
+- 命名 `genesis_world_day<N>_<seed>.json` 存入 specimens\（seed 取自封存，勿写死）
+- 校验：JSON 可解析、含 time/seed/plants/animals 且 seed 与最新封存一致
+- 可选：localStorage 内 `genesis-tomb-v1-<seed>` 墓碑（创世遗嘱自动标本，最多三座）无需另行处理；伙伴若在封面下载了 .tomb.json，一并收入 specimens\
 
 ### 3. git（写操作必须非沙箱）
 - `git -C d:\TraeCode_repository\test status --short` 盘点

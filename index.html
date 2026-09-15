@@ -113,6 +113,10 @@ canvas{position:absolute;inset:0;display:block}
 #log .mile-h{font-size:9px;color:#56637a;letter-spacing:2px;margin:9px 0 3px;border-top:1px solid var(--line);padding-top:7px}
 #mileList{max-height:13vh;overflow-y:auto;overscroll-behavior:contain}
 #mileList .e{opacity:1;transform:none;animation:none;margin:3px 0}
+#tombRow{margin-top:10px;font-size:11px;color:#7a879c;line-height:1.7}
+#tombRow .tomb-h{letter-spacing:2px;color:#56637a;margin-bottom:2px}
+#tombRow .tomb{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+#tombRow .tomb:hover{color:#cdd8ea}
 @keyframes slidein{to{opacity:1;transform:none}}
 
 /* ---------- 小地图 ---------- */
@@ -274,6 +278,7 @@ canvas{position:absolute;inset:0;display:block}
     </div>
     <button class="bigbtn" id="startBtn">点 燃 生 命</button>
     <button class="bigbtn" id="awakeBtn" style="display:none;margin-top:12px">苏 醒</button>
+    <div id="tombRow"></div>
   </div>
 </div>
 
@@ -1100,7 +1105,7 @@ const history={pop:[],trait:[]};
 const logEntries=[];
 /* 大事记：只收结构性里程碑（灾变、灭绝、支系、苏醒），不收反复漂移的趋势注记 */
 const milestones=[];
-const MILESTONE_RE=/支系|灭绝|消失|反向演化|陨石|繁盛|爆炸|苏醒|纪元开启|世界种子/;
+const MILESTONE_RE=/支系|灭绝|消失|反向演化|陨石|繁盛|爆炸|苏醒|纪元开启|世界种子|立碑/;
 let selected=null;
 
 /* ---------------- 辉光精灵缓存 ---------------- */
@@ -1750,9 +1755,12 @@ resetBtn.onclick=()=>{
   }else{
     clearTimeout(resetTimer); resetArmed=false;
     resetBtn.textContent='↻'; resetBtn.classList.remove('active');
+    const epitaph=buryWorld(world.sealData()); /* 创世遗嘱：旧世界先立碑，再点火 */
     world.seed=((Math.random()*0xffffffff)>>>0).toString(16).padStart(8,'0');
     world.reset();
+    if(epitaph) world.log(`🕯 上一世界线 #${epitaph.seed}（第 ${Math.floor(epitaph.time/DAY_LEN)+1} 天）已立碑保存`,'');
     world.seal();
+    renderTombRow();
     showHint('新的世界已诞生');
   }
 };
@@ -1811,10 +1819,18 @@ requestAnimationFrame(frame);
 
 /* ---------------- 启动 ---------------- */
 document.getElementById('startBtn').onclick=()=>{
+  /* 点火门槛：当前世界仍在封存中时，显式确认（防止误触让一条世界线无声蒸发） */
+  if(savedWorld){
+    const day=Math.floor(savedWorld.time/DAY_LEN)+1;
+    if(!confirm(`封存中存在世界 #${savedWorld.seed}（第 ${day} 天）。\n\n点燃新世界会覆盖当前世界。\n旧世界将自动「立碑」保存为标本（最多保留三座，可在封面下载，或日后用 📂 导入续接为分叉世界线）。\n\n确定点燃新世界？`)) return;
+  }
+  const epitaph=savedWorld?buryWorld(savedWorld):null;
   document.getElementById('startOverlay').classList.add('hidden');
   if(soundOn){ Sound.ensure(); if(Sound.ctx&&Sound.ctx.state==='suspended') Sound.ctx.resume(); }
   world.reset();
+  if(epitaph) world.log(`🕯 上一世界线 #${epitaph.seed}（第 ${Math.floor(epitaph.time/DAY_LEN)+1} 天）已立碑保存`,'');
   world.seal();
+  renderTombRow();
   started=true;
   setTimeout(()=>showHint('提示：点击任意生物，可以看到它的基因谱'),1200);
 };
@@ -1839,6 +1855,60 @@ awakeBtn.onclick=()=>{
 window.addEventListener('beforeunload',()=>{ if(started) world.seal(); });
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&started) world.seal(); });
 let sealTimer=25;
+
+/* ---------------- 创世遗嘱：墓碑（自动标本） ----------------
+   点火/重置/导入异线前，旧封存自动存入独立键 genesis-tomb-v1-<seed>。
+   同种子只留最新一座，最多保留三座。墓碑不是存档位：死亡不可撤销，
+   但墓碑可下载/📂导入，成为诚实标注的分叉世界线。 */
+const TOMB_PREFIX='genesis-tomb-v1-';
+function buryWorld(d){
+  try{
+    if(!d||d.v!==1||!d.seed) return null;
+    localStorage.setItem(TOMB_PREFIX+d.seed,JSON.stringify(d));
+    const tombs=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.indexOf(TOMB_PREFIX)===0){
+        try{ tombs.push([k,(JSON.parse(localStorage.getItem(k))||{}).time||0]); }catch(e){}
+      }
+    }
+    tombs.sort((a,b)=>b[1]-a[1]);
+    tombs.slice(3).forEach(x=>{ try{ localStorage.removeItem(x[0]); }catch(e){} });
+    return d;
+  }catch(e){ return null; }
+}
+function listTombs(){
+  const out=[];
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.indexOf(TOMB_PREFIX)===0){
+        try{ out.push(JSON.parse(localStorage.getItem(k))); }catch(e){}
+      }
+    }
+  }catch(e){}
+  return out.filter(d=>d&&d.seed).sort((a,b)=>(b.time||0)-(a.time||0));
+}
+function downloadSpecimen(d,suffix){
+  const day=Math.floor((d.time||0)/DAY_LEN)+1;
+  const blob=new Blob([JSON.stringify(d)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`genesis_world_day${day}_${d.seed}${suffix||''}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+function renderTombRow(){
+  const row=document.getElementById('tombRow'); if(!row) return;
+  const tombs=listTombs();
+  if(!tombs.length){ row.innerHTML=''; return; }
+  row.innerHTML='<div class="tomb-h">🕯 已 立 碑 的 世 界</div>'+
+    tombs.map(d=>`<div class="tomb" data-seed="${d.seed}" title="点击下载该世界的标本 JSON">#${d.seed} · 第 ${Math.floor((d.time||0)/DAY_LEN)+1} 天 · 下载标本</div>`).join('');
+  row.querySelectorAll('.tomb').forEach(el=>{
+    el.onclick=()=>{ const d=listTombs().find(t=>t.seed===el.dataset.seed); if(d){ downloadSpecimen(d,'.tomb'); showHint('墓碑标本已导出'); } };
+  });
+}
+renderTombRow();
 
 /* 世界标本：导出为文件（可入 U 盘 / genesis.seed 快照），或从文件苏醒 */
 document.getElementById('exportBtn').onclick=()=>{
@@ -1874,6 +1944,7 @@ importFile.addEventListener('change',e=>{
     try{
       const d=JSON.parse(rd.result);
       if(!d||d.v!==1||!d.seed||!Array.isArray(d.plants)||!Array.isArray(d.animals)) throw new Error('bad');
+      if(savedWorld&&savedWorld.seed!==d.seed) buryWorld(savedWorld); /* 导入异线=迁葬当前世界 */
       document.getElementById('startOverlay').classList.add('hidden');
       if(soundOn){ Sound.ensure(); if(Sound.ctx&&Sound.ctx.state==='suspended') Sound.ctx.resume(); }
       world.awaken(d);
