@@ -1702,7 +1702,9 @@ function logRow(e){
   return `<div class="e ${e.cls}"><i style="background:${dot}"></i>[D${e.day}] ${e.text}</div>`;
 }
 function renderLog(){
-  document.getElementById('logList').innerHTML=logEntries.slice(-5).map(logRow).join('');
+  /* 已入大事记的条目不在近况区重复；近况只滚动展示未被册封的日常 */
+  const mkeys=new Set(milestones.slice(-60).map(e=>e.day+'|'+e.text));
+  document.getElementById('logList').innerHTML=logEntries.slice(-5).filter(e=>!mkeys.has(e.day+'|'+e.text)).map(logRow).join('');
   document.getElementById('mileList').innerHTML=milestones.slice(-60).map(logRow).join('');
   const box=document.getElementById('log');
   box.scrollTop=box.scrollHeight;
