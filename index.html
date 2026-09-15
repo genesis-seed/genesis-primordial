@@ -110,6 +110,9 @@ canvas{position:absolute;inset:0;display:block}
 #log::-webkit-scrollbar{width:4px}
 #log::-webkit-scrollbar-thumb{background:rgba(140,170,200,.25);border-radius:2px}
 #log .e.good{color:#9edfba}#log .e.warn{color:#ffce8a}#log .e.bad{color:#ff9aa9}
+#log .mile-h{font-size:9px;color:#56637a;letter-spacing:2px;margin:9px 0 3px;border-top:1px solid var(--line);padding-top:7px}
+#mileList{max-height:13vh;overflow-y:auto;overscroll-behavior:contain}
+#mileList .e{opacity:1;transform:none;animation:none;margin:3px 0}
 @keyframes slidein{to{opacity:1;transform:none}}
 
 /* ---------- 小地图 ---------- */
@@ -246,6 +249,8 @@ canvas{position:absolute;inset:0;display:block}
 <!-- 事件日志 -->
 <div class="glass" id="log">
   <h3>世 界 纪 元</h3>
+  <div class="mile-h">大 事 记</div>
+  <div id="mileList"></div>
   <div id="logList"></div>
 </div>
 
@@ -831,7 +836,9 @@ const world={
     }
     for(let i=0;i<START.herbs;i++) this.addAnimal(new Animal('herb',rand(120,WORLD_W-120),rand(120,WORLD_H-120),randomGenes('herb')));
     for(let i=0;i<START.preds;i++) this.addAnimal(new Animal('pred',rand(200,WORLD_W-200),rand(200,WORLD_H-200),randomGenes('pred')));
-    logEntries.length=0; document.getElementById('logList').innerHTML='';
+    logEntries.length=0; milestones.length=0;
+    document.getElementById('logList').innerHTML='';
+    document.getElementById('mileList').innerHTML='';
     this.log('纪元开启，最初的生命被点燃','good');
     this.log(`世界种子 #${this.seed}`,'');
     hideInspector();
@@ -846,8 +853,17 @@ const world={
   float(x,y,text,color){ this.floaters.push(new Floater(x,y,text,color)); },
 
   log(text,cls){
-    logEntries.push({text,cls,day:this.day});
+    const e={text,cls,day:this.day};
+    logEntries.push(e);
     if(logEntries.length>60) logEntries.shift();
+    /* 大事记：里程碑事件永久入册，不被滚动缓冲挤出（随封存入档） */
+    if(MILESTONE_RE.test(text)){
+      const m=milestones[milestones.length-1];
+      if(!m||m.text!==text||m.day!==this.day){
+        milestones.push(e);
+        if(milestones.length>1000) milestones.shift();
+      }
+    }
     renderLog();
   },
   onDeath(a,cause){
@@ -864,7 +880,7 @@ const world={
       sexBirths:this.sexBirths, cloneBirths:this.cloneBirths,
       flags:this._flags||null, UID,
       fert:Array.from(fert),
-      pop:history.pop, trait:history.trait, log:logEntries,
+      pop:history.pop, trait:history.trait, log:logEntries, mil:milestones,
       cam:{x:cam.x,y:cam.y,zoom:cam.zoom},
       plants:this.plants.filter(p=>!p.dead).map(p=>[p.id,p.x,p.y,p.energy,p.age,p.gen,p.ancestor,p.children,
         p.genes.growth,p.genes.maxE,p.genes.cold,p.genes.hue]),
@@ -903,6 +919,13 @@ const world={
     if(d.flags) this._flags=d.flags;
     history.pop=d.pop||[]; history.trait=d.trait||[];
     logEntries.length=0; (d.log||[]).forEach(e=>logEntries.push(e));
+    /* 大事记恢复；旧档无 mil 时从现存滚动日志中打捞里程碑（仅能回溯到缓冲区内） */
+    milestones.length=0;
+    const seen=new Set();
+    (d.mil||(d.log||[]).filter(e=>MILESTONE_RE.test(e.text))).forEach(e=>{
+      const k=e.day+'|'+e.text;
+      if(!seen.has(k)){ seen.add(k); milestones.push(e); }
+    });
     genTerrain(parseInt(this.seed,16)||1);
     if(d.cam){ cam.x=d.cam.x; cam.y=d.cam.y; cam.zoom=d.cam.zoom; }
     selected=null; hideInspector();
@@ -1075,6 +1098,9 @@ const world={
 let night=0;
 const history={pop:[],trait:[]};
 const logEntries=[];
+/* 大事记：只收结构性里程碑（灾变、灭绝、支系、苏醒），不收反复漂移的趋势注记 */
+const milestones=[];
+const MILESTONE_RE=/支系|灭绝|消失|反向演化|陨石|繁盛|爆炸|苏醒|纪元开启|世界种子/;
 let selected=null;
 
 /* ---------------- 辉光精灵缓存 ---------------- */
@@ -1671,11 +1697,13 @@ function hideInspector(){ inspector.style.display='none'; selected=null; }
 document.getElementById('inspClose').onclick=hideInspector;
 
 /* ---------------- 日志 ---------------- */
+function logRow(e){
+  const dot=e.cls==='good'?'#46e08a':e.cls==='warn'?'#ffb547':e.cls==='bad'?'#ff4d6d':'#5e6b80';
+  return `<div class="e ${e.cls}"><i style="background:${dot}"></i>[D${e.day}] ${e.text}</div>`;
+}
 function renderLog(){
-  const el=document.getElementById('logList');
-  el.innerHTML=logEntries.slice(-5).map(e=>
-    `<div class="e ${e.cls}"><i style="background:${e.cls==='good'?'#46e08a':e.cls==='warn'?'#ffb547':e.cls==='bad'?'#ff4d6d':'#5e6b80'}"></i>[D${e.day}] ${e.text}</div>`
-  ).join('');
+  document.getElementById('logList').innerHTML=logEntries.slice(-5).map(logRow).join('');
+  document.getElementById('mileList').innerHTML=milestones.slice(-60).map(logRow).join('');
   const box=document.getElementById('log');
   box.scrollTop=box.scrollHeight;
 }
