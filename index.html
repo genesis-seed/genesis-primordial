@@ -1837,9 +1837,9 @@ requestAnimationFrame(frame);
 setInterval(()=>{
   if(document.hidden&&started&&!paused){
     const stepDt=1/60;
-    for(let i=0;i<8;i++) world.step(stepDt);
+    for(let i=0;i<60;i++) world.step(stepDt);
     world.day=Math.floor(world.time/DAY_LEN)+1;
-    sealTimer-=8/60;
+    sealTimer-=1;
     if(sealTimer<=0){ sealTimer=25; world.seal(); }
   }
 },1000);
