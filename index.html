@@ -823,7 +823,7 @@ const world={
   spawnAcc:0, histTimer:0, eventTimer:1,
   maxHerbs:START.herbs, generations:0,
   sexBirths:0, cloneBirths:0,
-  seed:((Math.random()*0xffffffff)>>>0).toString(16).padStart(8,'0'),
+  seed:(new URLSearchParams(location.search).get('seed')||((Math.random()*0xffffffff)>>>0).toString(16).padStart(8,'0')),
 
   reset(){
     this.plants=[]; this.animals=[]; this.particles=[]; this.floaters=[]; this.meteors=[];
