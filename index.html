@@ -563,6 +563,7 @@ class Animal{
     this.heading=rand(TAU); this.wander=rand(TAU);
     this.biteCd=0; this.birthCd=rand(5,10);
     this.state='漫游'; this.children=0; this.kills=0; this.ancestor=0;
+    this.motherId=0; this.fatherId=0; this.birthTime=0;
     this.fleePulse=0;
   }
   /* 食性阈值：diet 超过此值才会主动猎杀；低于此值只吃草；中间为杂食 */
@@ -743,6 +744,7 @@ class Animal{
         child=new this.constructor(this.kind,cx,cy,
           recombine(g,mate.genes,this.kind),Math.max(this.gen,mate.gen)+1);
         child.energy=cost*1.2*0.9; child.ancestor=this.ancestor||this.id;
+        child.motherId=this.id; child.fatherId=mate.id; child.birthTime=world.time;
         world.sexBirths++;
         world.burst((this.x+mate.x)/2,(this.y+mate.y)/2,10,'255,235,190',0.9,2.2);
       }else{
@@ -750,6 +752,7 @@ class Animal{
         this.energy-=cost; this.birthCd=11+5*diet; this.children++;
         child=new this.constructor(this.kind,cx,cy,mutate(g,this.kind),this.gen+1);
         child.energy=cost*0.92; child.ancestor=this.ancestor||this.id;
+        child.motherId=this.id; child.fatherId=0; child.birthTime=world.time;
         world.cloneBirths++;
         world.burst(this.x,this.y,8,diet>0.5?'255,120,150':'255,210,130',0.8,2);
       }
@@ -823,6 +826,7 @@ const world={
   spawnAcc:0, histTimer:0, eventTimer:1,
   maxHerbs:START.herbs, generations:0,
   sexBirths:0, cloneBirths:0,
+  deathLog:[],
   seed:(new URLSearchParams(location.search).get('seed')||((Math.random()*0xffffffff)>>>0).toString(16).padStart(8,'0')),
 
   reset(){
@@ -830,6 +834,7 @@ const world={
     this.time=0; this.day=1; this.night=0; this.spawnAcc=0;
     this.maxHerbs=0; this.generations=0;
     this.sexBirths=0; this.cloneBirths=0;
+    this.deathLog=[];
     fert.fill(0); UID=1; selected=null;
     genTerrain(parseInt(this.seed,16)||1);
     history.pop.length=0; history.trait.length=0;
@@ -874,6 +879,10 @@ const world={
   onDeath(a,cause){
     if(selected===a) selected=null;
     if(a.gen>this.generations) this.generations=a.gen;
+    /* 血脉日志：个体传记的数据来源——死亡时记下它从哪来、活了多久、因何而死 */
+    this.deathLog.push([a.id,a.gen,a.ancestor,a.motherId,a.fatherId,
+      a.birthTime,this.time,cause,a.genes.diet.toFixed(3),a.genes.size.toFixed(3)]);
+    if(this.deathLog.length>1500) this.deathLog.splice(0,this.deathLog.length-1500);
   },
 
   /* ---- 封存与苏醒：世界跨越关机延续（死亡仍不可撤销，封存是冬眠不是回档） ---- */
@@ -883,6 +892,7 @@ const world={
       histTimer:this.histTimer, eventTimer:this.eventTimer,
       maxHerbs:this.maxHerbs, generations:this.generations,
       sexBirths:this.sexBirths, cloneBirths:this.cloneBirths,
+      deathLog:this.deathLog,
       flags:this._flags||null, UID,
       fert:Array.from(fert),
       pop:history.pop, trait:history.trait, log:logEntries, mil:milestones,
@@ -890,7 +900,7 @@ const world={
       plants:this.plants.filter(p=>!p.dead).map(p=>[p.id,p.x,p.y,p.energy,p.age,p.gen,p.ancestor,p.children,
         p.genes.growth,p.genes.maxE,p.genes.cold,p.genes.hue]),
       animals:this.animals.filter(a=>!a.dead).map(a=>[a.kind,a.id,a.x,a.y,a.vx,a.vy,a.energy,a.age,a.heading,a.wander,
-        a.biteCd,a.birthCd,a.gen,a.children,a.kills,a.ancestor,
+        a.biteCd,a.birthCd,a.gen,a.children,a.kills,a.ancestor,a.motherId,a.fatherId,a.birthTime,
         a.genes.size,a.genes.speed,a.genes.sense,a.genes.eff,a.genes.repro,a.genes.life,a.genes.bold,a.genes.greg,a.genes.diet,a.genes.hue])
     };
   },
@@ -908,11 +918,15 @@ const world={
       return p;
     });
     this.animals=d.animals.map(r=>{
-      const g={size:r[16],speed:r[17],sense:r[18],eff:r[19],repro:r[20],life:r[21],bold:r[22],greg:r[23],diet:r[24],hue:r[25]};
+      /* 兼容新旧封存：旧版26字段无血脉信息，新版29字段含 motherId/fatherId/birthTime */
+      const newFmt=r.length>=29;
+      const gi=newFmt?19:16;
+      const g={size:r[gi],speed:r[gi+1],sense:r[gi+2],eff:r[gi+3],repro:r[gi+4],life:r[gi+5],bold:r[gi+6],greg:r[gi+7],diet:r[gi+8],hue:r[gi+9]};
       const a=new Animal(r[0],r[1],r[2],g,r[12]);
       a.id=r[3]; a.vx=r[4]; a.vy=r[5]; a.energy=r[6]; a.age=r[7];
       a.heading=r[8]; a.wander=r[9]; a.biteCd=r[10]; a.birthCd=r[11];
       a.children=r[13]; a.kills=r[14]; a.ancestor=r[15];
+      if(newFmt){ a.motherId=r[16]; a.fatherId=r[17]; a.birthTime=r[18]; }
       return a;
     });
     this.particles=[]; this.floaters=[]; this.meteors=[];
@@ -921,6 +935,7 @@ const world={
     this.spawnAcc=d.spawnAcc; this.histTimer=d.histTimer; this.eventTimer=d.eventTimer;
     this.maxHerbs=d.maxHerbs; this.generations=d.generations;
     this.sexBirths=d.sexBirths||0; this.cloneBirths=d.cloneBirths||0;
+    this.deathLog=d.deathLog||[];
     if(d.flags) this._flags=d.flags;
     history.pop=d.pop||[]; history.trait=d.trait||[];
     logEntries.length=0; (d.log||[]).forEach(e=>logEntries.push(e));
