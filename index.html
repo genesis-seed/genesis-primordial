@@ -1817,6 +1817,18 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 
+/* 后台标签保活：rAF 在隐藏标签被节流至近停，用 setInterval 补跑模拟
+   前台行为不变；仅 document.hidden 时触发，约 0.5x 速，保证种子园多世界并行演化 */
+setInterval(()=>{
+  if(document.hidden&&started&&!paused){
+    const stepDt=1/60;
+    for(let i=0;i<8;i++) world.step(stepDt);
+    world.day=Math.floor(world.time/DAY_LEN)+1;
+    sealTimer-=8/60;
+    if(sealTimer<=0){ sealTimer=25; world.seal(); }
+  }
+},1000);
+
 /* ---------------- 启动 ---------------- */
 document.getElementById('startBtn').onclick=()=>{
   /* 点火门槛：当前世界仍在封存中时，显式确认（防止误触让一条世界线无声蒸发） */
