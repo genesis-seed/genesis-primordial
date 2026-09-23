@@ -318,11 +318,26 @@ canvas{position:absolute;inset:0;display:block}
 const TAU = Math.PI * 2;
 const clamp = (v,a,b)=> v<a?a : v>b?b : v;
 const lerp  = (a,b,t)=> a+(b-a)*t;
-const rand  = (a=1,b)=> b===undefined ? Math.random()*a : a+Math.random()*(b-a);
-const randInt = (a,b)=> (a+Math.random()*(b-a+1))|0;
+/* 种子化 PRNG：mulberry32 —— 让世界线可重跑、可审计
+   模拟核心全部走 rng()，装饰层（星空/新种子抽取）仍用 Math.random()。
+   _rngState 随封存/苏醒流转，保证同种子+同规则+无干预 = 逐天一致。 */
+let _rngState = 0x12345678 >>> 0;
+function mulberry32(state){
+  let s = state >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let rng = mulberry32(_rngState);
+function seedRng(seedInt){ _rngState = (seedInt>>>0)||1; rng = mulberry32(_rngState); }
+const rand  = (a=1,b)=> b===undefined ? rng()*a : a+rng()*(b-a);
+const randInt = (a,b)=> (a+rng()*(b-a+1))|0;
 function gauss(){ // Box–Muller
   let u=0,v=0;
-  while(!u) u=Math.random(); while(!v) v=Math.random();
+  while(!u) u=rng(); while(!v) v=rng();
   return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v);
 }
 const dist2=(x1,y1,x2,y2)=>{const dx=x2-x1,dy=y2-y1;return dx*dx+dy*dy;};
@@ -536,7 +551,7 @@ function mutate(g,type){
 /* 有性生殖：每个位点从双亲随机取一，再叠加小幅突变——
    有利突变可跨系组合，有害突变可经重组卸除（破解穆勒棘轮） */
 function recombine(a,b,type){
-  const pick=(k)=>Math.random()<0.5?a[k]:b[k];
+  const pick=(k)=>rng()<0.5?a[k]:b[k];
   const m=(v,amt,lo,hi)=>clamp(v+gauss()*amt,lo,hi);
   return {
     size: m(pick('size'),0.10,...GENE_LIMITS.size),
@@ -691,7 +706,7 @@ class Animal{
           const eat=Math.min(rate*dt,tgt.energy);
           tgt.energy-=eat; this.energy=Math.min(this.maxE,this.energy+eat*0.96);
           if(tgt.energy<=0){ tgt.dead=true; depositFert(tgt.x,tgt.y,2.2,14); }
-          if(Math.random()<dt*9) world.burst(this.x,this.y,1,'140,240,160',0.5,1.6);
+          if(rng()<dt*9) world.burst(this.x,this.y,1,'140,240,160',0.5,1.6);
         }
       }else if(this.biteCd<=0){
         const d=Math.sqrt(td);
@@ -757,7 +772,7 @@ class Animal{
         world.burst(this.x,this.y,8,diet>0.5?'255,120,150':'255,210,130',0.8,2);
       }
       world.addAnimal(child);
-      if(Math.random()<0.5) Sound.blip(rand(560,840),0.1,0.02,'sine');
+      if(rng()<0.5) Sound.blip(rand(560,840),0.1,0.02,'sine');
     }
 
     /* --- 死亡 --- */
@@ -836,6 +851,7 @@ const world={
     this.sexBirths=0; this.cloneBirths=0;
     this.deathLog=[];
     fert.fill(0); UID=1; selected=null;
+    seedRng(parseInt(this.seed,16)||1);
     genTerrain(parseInt(this.seed,16)||1);
     history.pop.length=0; history.trait.length=0;
     for(let i=0;i<START.hotspots;i++) depositFert(rand(120,WORLD_W-120),rand(120,WORLD_H-120),rand(40,120),rand(90,200));
@@ -889,6 +905,7 @@ const world={
   sealData(){
     return {
       v:1, seed:this.seed, time:this.time, spawnAcc:this.spawnAcc,
+      rng:_rngState,
       histTimer:this.histTimer, eventTimer:this.eventTimer,
       maxHerbs:this.maxHerbs, generations:this.generations,
       sexBirths:this.sexBirths, cloneBirths:this.cloneBirths,
@@ -947,6 +964,9 @@ const world={
       if(!seen.has(k)){ seen.add(k); milestones.push(e); }
     });
     genTerrain(parseInt(this.seed,16)||1);
+    /* 苏醒恢复 rng 状态：让"封存-苏醒"透明，世界线继续而非分叉。
+       旧档无 rng 字段则用种子重置（旧档本来就不确定，不破坏现有行为）。 */
+    seedRng(d.rng!==undefined ? d.rng : (parseInt(this.seed,16)||1));
     if(d.cam){ cam.x=d.cam.x; cam.y=d.cam.y; cam.zoom=d.cam.zoom; }
     selected=null; hideInspector();
     renderLog(); drawCharts();
@@ -1001,9 +1021,9 @@ const world={
   trySpawnPlant(){
     let x,y,ok=false,tries=0;
     do{
-      if(Math.random()<0.32){
+      if(rng()<0.32){
         x=rand(40,WORLD_W-40); y=rand(40,WORLD_H-40);
-        if(fertAt(x,y)>0.18 || Math.random()<0.5) ok=true;
+        if(fertAt(x,y)>0.18 || rng()<0.5) ok=true;
       }else{
         const ci=randInt(0,FCOLS-1), ri=randInt(0,FROWS-1);
         if(fert[fidx(ci,ri)]>0.22){
@@ -1157,7 +1177,7 @@ function screenToWorld(sx,sy){
 
 /* ---------------- 渲染 ---------------- */
 const stars=[];
-for(let i=0;i<150;i++) stars.push({x:Math.random(),y:Math.random()*0.8,r:rand(.4,1.4),tw:rand(TAU)});
+for(let i=0;i<150;i++) stars.push({x:Math.random(),y:Math.random()*0.8,r:0.4+Math.random()*1.0,tw:Math.random()*TAU});
 
 // 肥力热力图（低分辨率离屏画布）
 const fertCanvas=document.createElement('canvas');
