@@ -1858,7 +1858,165 @@ function frame(now){
   sealTimer-=dt;
   if(sealTimer<=0&&started){ sealTimer=25; world.seal(); }
 }
-requestAnimationFrame(frame);
+/* ---- 频闪实验模式：?exp=seal&seed=2ddf82ed&days=30 ----
+   同页顺序跑两遍完全重置的同种子世界，唯一差别为封存节奏（虚拟秒）。
+   全程只走 world.step(1/60) 确定性固定步，不调用渲染；封存走真实 seal() 路径。 */
+const EXP=(()=>{
+  const q=new URLSearchParams(location.search);
+  if(q.get('exp')!=='seal') return null;
+  const days=Math.max(1,Math.min(120,parseInt(q.get('days'),10)||30));
+  return {seed:q.get('seed')||'2ddf82ed', days};
+})();
+
+async function runExp(){
+  const pre=document.createElement('pre');
+  pre.id='expOut';
+  pre.style.cssText='position:fixed;inset:0;margin:0;background:#04070d;color:#8fd3ff;font:12px/1.55 ui-monospace,Consolas,monospace;padding:14px;white-space:pre-wrap;word-break:break-all;z-index:99999;overflow:auto';
+  document.body.appendChild(pre);
+  document.title='EXP START';
+  const DT=1/60, TOTAL=EXP.days*DAY_LEN, N=Math.round(TOTAL/DT), CHUNK=600;
+  const TRACE=new URLSearchParams(location.search).get('trace')==='1';
+
+  async function runOnce(cad,label,doTrace){
+    world.seed=EXP.seed; world.reset();
+    const per=Math.round(cad/DT);
+    const seals=[], truth=[], boundary=[], stepTrace=[];
+    for(let i0=0;i0<N;i0+=CHUNK){
+      if(doTrace){ const c=world.counts(); boundary.push([i0,+world.time.toFixed(3),c.p,c.h,c.d,document.hidden?1:0,world.meteors.length]); }
+      const end=Math.min(N,i0+CHUNK);
+      for(let i=i0;i<end;i++){
+        world.step(DT);
+        const k=i+1;
+        if(k%60===0){ const c=world.counts(); truth.push([k/60,c.p,c.h,c.d]); }
+        if(k%per===0){ world.seal(); const c=world.counts(); seals.push([k/60,world.day,c.p,c.h,c.d]); }
+        if(doTrace&&k>=595&&k<=670){ const c=world.counts(); stepTrace.push([k,+world.time.toFixed(3),c.p,c.h,c.d,_rngState]); }
+      }
+      document.title='EXP '+label+' t='+Math.floor(world.time)+'/'+TOTAL;
+      await new Promise(r=>setTimeout(r,0));
+    }
+    return {seals,truth,boundary,stepTrace};
+  }
+
+  /* 实验不需要图表渲染（Node 桩下是 Proxy 开销大头），短路之 */
+  drawCharts=()=>{};
+
+  /* 外部调用钩子：谁在两次 step 之间动了世界？ */
+  const extLog=[];
+  const stackHint=()=>{ try{ return new Error().stack.split('\n').slice(2,9).map(s=>s.trim()).join(' <- '); }catch(e){ return ''; } };
+  const _reset=world.reset; world.reset=function(){ extLog.push(['reset',world.time,stackHint()]); return _reset.apply(this,arguments); };
+  const _awaken=world.awaken; world.awaken=function(d){ extLog.push(['awaken',d&&d.time,d&&d.plants&&d.plants.length,d&&d.animals&&d.animals.length,stackHint()]); return _awaken.apply(this,arguments); };
+  const _seal=world.seal; world.seal=function(){ extLog.push(['seal',+world.time.toFixed(2),stackHint()]); return _seal.apply(this,arguments); };
+  const _setItem=Storage.prototype.setItem; Storage.prototype.setItem=function(k,v){ extLog.push(['setItem',String(k),v.length]); return _setItem.apply(this,arguments); };
+  /* 属性陷阱：任何对 world.plants / world.animals 的整体替换都记下调用栈 */
+  let _pStore=world.plants, _aStore=world.animals;
+  Object.defineProperty(world,'plants',{configurable:true,enumerable:true,
+    get(){return _pStore;}, set(v){ extLog.push(['plants<-',+world.time.toFixed(3),v&&v.length]); _pStore=v; }});
+  Object.defineProperty(world,'animals',{configurable:true,enumerable:true,
+    get(){return _aStore;}, set(v){ extLog.push(['animals<-',+world.time.toFixed(3),v&&v.length]); _aStore=v; }});
+
+  const t0=performance.now();
+  const A=await runOnce(25,'25s',TRACE);
+  extLog.push(['--- run B begins ---']);
+  const B=await runOnce(5,'5s',false);
+  const elapsedSec=+((performance.now()-t0)/1000).toFixed(1);
+
+  /* 自检 1：两条独立重放在每个整秒的 p/h/d 完全一致（B 的封存次数是 A 的 5 倍） */
+  const truthMM=[];
+  for(let i=0;i<Math.min(A.truth.length,B.truth.length);i++){
+    const x=A.truth[i], y=B.truth[i];
+    if(x[1]!==y[1]||x[2]!==y[2]||x[3]!==y[3]){
+      truthMM.push([x[0],[x[1],x[2],x[3]],[y[1],y[2],y[3]]]);
+      if(truthMM.length>=10) break;
+    }
+  }
+  /* 自检 2：A 的每个封存点也是 B 的封存点，记录一致 */
+  const bMap=new Map(B.seals.map(s=>[s[0],s]));
+  const sealMM=[];
+  for(const s of A.seals){
+    const t=bMap.get(s[0]);
+    if(!t||s[2]!==t[2]||s[3]!==t[3]||s[4]!==t[4]){
+      sealMM.push([s[0],[s[2],s[3],s[4]],t?[t[2],t[3],t[4]]:null]);
+      if(sealMM.length>=10) break;
+    }
+  }
+
+  /* 归一为 [t, 植物, 动物总数] */
+  const normSeal=s=>[s[0],s[2],s[3]+s[4]];
+  const normTruth=s=>[s[0],s[1],s[2]+s[3]];
+  const seal25=A.seals.map(normSeal), seal5=B.seals.map(normSeal);
+  const truth5=A.truth.filter(s=>s[0]%5===0).map(normTruth);
+
+  const stats=arr=>{
+    let pMin=1e9,pMax=-1e9,aMin=1e9,aMax=-1e9;
+    for(const x of arr){
+      if(x[1]<pMin)pMin=x[1]; if(x[1]>pMax)pMax=x[1];
+      if(x[2]<aMin)aMin=x[2]; if(x[2]>aMax)aMax=x[2];
+    }
+    return {plantsMin:pMin,plantsMax:pMax,animalsMin:aMin,animalsMax:aMax,
+            plantsFirst:arr[0][1],plantsLast:arr[arr.length-1][1],
+            animalsFirst:arr[0][2],animalsLast:arr[arr.length-1][2],n:arr.length};
+  };
+
+  /* zigzag 转折检测：振幅 ≥ thresh 的峰谷 */
+  function zigzag(series,thresh){
+    const out=[]; let piv=0, dir=0;
+    for(let i=1;i<series.length;i++){
+      const v=series[i][2], pv=series[piv][2];
+      if(!dir){
+        if(v-pv>=thresh) dir=1;
+        else if(pv-v>=thresh) dir=-1;
+        else continue;
+      }
+      if(dir===1){
+        if(v>pv) piv=i;
+        else if(pv-v>=thresh){ out.push([series[piv][0],pv,'peak']); dir=-1; piv=i; }
+      }else{
+        if(v<pv) piv=i;
+        else if(v-pv>=thresh){ out.push([series[piv][0],pv,'valley']); dir=1; piv=i; }
+      }
+    }
+    if(dir) out.push([series[piv][0],series[piv][2],dir===1?'peak':'valley']);
+    return out;
+  }
+  const truth1=A.truth.map(normTruth);
+  const pivots=zigzag(truth1,10);
+  const capture=(curve,win,tol)=>pivots.map(p=>{
+    for(const c of curve){
+      if(Math.abs(c[0]-p[0])>win) continue;
+      if(p[2]==='peak'? c[2]>=p[1]-tol : c[2]<=p[1]+tol) return 1;
+    }
+    return 0;
+  });
+  const cap5=capture(seal5,5,3), cap25=capture(seal25,25,3);
+
+  const report={
+    experiment:'seal-cadence / strobe test',
+    startedAt:new Date().toISOString(), seed:EXP.seed, days:EXP.days,
+    totalSimSec:TOTAL, totalStepsPerRun:N, wallClockSec:elapsedSec,
+    samples:{seal25:seal25.length, seal5:seal5.length, truthPerSec:truth1.length},
+    selfCheck:{
+      precondition:'sealing does not alter world state',
+      perSecondTruthMismatches:truthMM.length, firstTruthMismatches:truthMM,
+      sharedSealMismatches:sealMM.length, firstSharedSealMismatches:sealMM,
+      passed: truthMM.length===0 && sealMM.length===0
+    },
+    range:{truth:stats(truth1), seal5:stats(seal5), seal25:stats(seal25)},
+    swings:{
+      thresholdAnimals:10, pivotsFound:pivots.length,
+      pivots:pivots.slice(0,60),
+      capturedBySeal5:cap5.reduce((a,b)=>a+b,0),
+      capturedBySeal25:cap25.reduce((a,b)=>a+b,0),
+      captureFlags5:cap5, captureFlags25:cap25
+    },
+    curves:{seal25, seal5, truth5},
+    trace:{boundary:A.boundary, stepTrace:A.stepTrace, extLog}
+  };
+  pre.textContent=JSON.stringify(report,null,1);
+  pre.dataset.done='1';
+  document.title='EXP DONE';
+}
+
+if(EXP) runExp(); else requestAnimationFrame(frame);
 
 /* 后台标签保活：rAF 在隐藏标签被节流至近停，用 setInterval 补跑模拟
    前台行为不变；仅 document.hidden 时触发，约 0.5x 速，保证种子园多世界并行演化 */
@@ -2014,8 +2172,8 @@ importFile.addEventListener('change',e=>{
 window.__gen={ world, get counts(){return world.counts();}, avgTraits:()=>world.avgTraits(),
   setSpeed:s=>{ speed=s; document.querySelectorAll('#speedSeg button').forEach(x=>x.classList.toggle('on',+x.dataset.s===s)); },
   setPaused:p=>setPaused(p), history, seal:()=>world.seal(), SAVE_KEY };
-// 启动前先渲染一帧空世界作为背景
-world.plants=[]; world.animals=[];
+// 启动前先渲染一帧空世界作为背景（实验模式下 runExp 已在途中，不能清）
+if(!EXP){ world.plants=[]; world.animals=[]; }
 </script>
 </body>
 </html>
