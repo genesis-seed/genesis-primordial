@@ -1880,11 +1880,13 @@ async function runExp(){
   document.title='EXP START';
   const DT=1/60, TOTAL=EXP.days*DAY_LEN, N=Math.round(TOTAL/DT), CHUNK=600;
   const TRACE=new URLSearchParams(location.search).get('trace')==='1';
+  const JITTER_SEC=Math.max(0,parseFloat(new URLSearchParams(location.search).get('jitter')||'0')||0);
 
   async function runOnce(cad,label,doTrace){
     world.seed=EXP.seed; world.reset();
     const per=Math.round(cad/DT);
     const seals=[], truth=[], boundary=[], stepTrace=[];
+    let nextSealStep=JITTER_SEC>0 ? Math.max(1,Math.round((cad+(Math.random()*2-1)*JITTER_SEC)/DT)) : per;
     for(let i0=0;i0<N;i0+=CHUNK){
       if(doTrace){ const c=world.counts(); boundary.push([i0,+world.time.toFixed(3),c.p,c.h,c.d,document.hidden?1:0,world.meteors.length]); }
       const end=Math.min(N,i0+CHUNK);
@@ -1892,7 +1894,11 @@ async function runExp(){
         world.step(DT);
         const k=i+1;
         if(k%60===0){ const c=world.counts(); truth.push([k/60,c.p,c.h,c.d]); }
-        if(k%per===0){ world.seal(); const c=world.counts(); seals.push([k/60,world.day,c.p,c.h,c.d]); }
+        if(JITTER_SEC>0){
+          if(k>=nextSealStep){ world.seal(); const c=world.counts(); seals.push([k/60,world.day,c.p,c.h,c.d]); nextSealStep=k+Math.max(1,Math.round((cad+(Math.random()*2-1)*JITTER_SEC)/DT)); }
+        }else{
+          if(k%per===0){ world.seal(); const c=world.counts(); seals.push([k/60,world.day,c.p,c.h,c.d]); }
+        }
         if(doTrace&&k>=595&&k<=670){ const c=world.counts(); stepTrace.push([k,+world.time.toFixed(3),c.p,c.h,c.d,_rngState]); }
       }
       document.title='EXP '+label+' t='+Math.floor(world.time)+'/'+TOTAL;
@@ -1938,8 +1944,10 @@ async function runExp(){
       }
     }
   }
-  /* 自检 2：节奏成整数倍关系时，疏节奏的每个封存点也落在密节奏上，记录一致 */
+  /* 自检 2：节奏成整数倍关系时，疏节奏的每个封存点也落在密节奏上，记录一致。
+     jitter 模式下封存时间随机，跨节奏封存点不再对齐，跳过此项。 */
   const sealMM=[];
+  if(JITTER_SEC<=0){
   outer:
   for(let i=0;i<EXP.cad.length;i++){
     for(let j=0;j<EXP.cad.length;j++){
@@ -1954,6 +1962,7 @@ async function runExp(){
       }
     }
   }
+  }
 
   /* 归一为 [t, 植物, 动物总数] */
   const normSeal=s=>[s[0],s[2],s[3]+s[4]];
@@ -1966,6 +1975,8 @@ async function runExp(){
   const truth5=runs[0].truth.filter(s=>s[0]%5===0).map(normTruth);
 
   const stats=arr=>{
+    if(!arr.length) return {plantsMin:0,plantsMax:0,animalsMin:0,animalsMax:0,
+            plantsFirst:0,plantsLast:0,animalsFirst:0,animalsLast:0,n:0};
     let pMin=1e9,pMax=-1e9,aMin=1e9,aMax=-1e9;
     for(const x of arr){
       if(x[1]<pMin)pMin=x[1]; if(x[1]>pMax)pMax=x[1];
@@ -1975,6 +1986,17 @@ async function runExp(){
             plantsFirst:arr[0][1],plantsLast:arr[arr.length-1][1],
             animalsFirst:arr[0][2],animalsLast:arr[arr.length-1][2],n:arr.length};
   };
+
+  /* cap-plateau：连续 ≥ minDurSec 秒贴 ANIMAL_CAP 的平台段计数（把墙和波分开） */
+  function countCapPlateaus(curve,cap,minDurSec){
+    let n=0, runStart=-1;
+    for(let i=0;i<curve.length;i++){
+      if(curve[i][2]>=cap){ if(runStart<0) runStart=i; }
+      else if(runStart>=0){ if(curve[i-1][0]-curve[runStart][0]>=minDurSec) n++; runStart=-1; }
+    }
+    if(runStart>=0 && curve[curve.length-1][0]-curve[runStart][0]>=minDurSec) n++;
+    return n;
+  }
 
   /* zigzag 转折检测：振幅 ≥ thresh 的峰谷 */
   function zigzag(series,thresh){
@@ -2024,8 +2046,8 @@ async function runExp(){
     swings['minAmplitude'+th]=entry;
   }
 
-  const range={truth:stats(truth1)};
-  cadAsc.forEach(c=>{ range[key(c)]=stats(sealCurves[key(c)]); });
+  const range={truth:Object.assign(stats(truth1),{capPlateaus10s:countCapPlateaus(truth1,ANIMAL_CAP,10)})};
+  cadAsc.forEach(c=>{ const s=stats(sealCurves[key(c)]); s.capPlateaus10s=countCapPlateaus(sealCurves[key(c)],ANIMAL_CAP,10); range[key(c)]=s; });
   const curves={truth1,truth5};
   cadAsc.forEach(c=>{ curves[key(c)]=sealCurves[key(c)]; });
 
@@ -2038,12 +2060,15 @@ async function runExp(){
     stepsPerRun:N,
     stepDtWorldSeconds:DT,
     wallClockSec:elapsedSec,
+    jitterSec:JITTER_SEC,
+    animalCap:ANIMAL_CAP,
     columns:'each sample is [time_world_seconds, plants, herbivores, predators] for truth; [time, plants, animals_total] for seal curves',
     cadences,
     selfCheck:{
       precondition:'sealing does not alter world state',
       perSecondTruthMismatches:truthMM.length, firstTruthMismatches:truthMM,
       sharedSealMismatches:sealMM.length, firstSharedSealMismatches:sealMM,
+      sharedSealCheckSkipped:JITTER_SEC>0,
       passed: truthMM.length===0 && sealMM.length===0
     },
     range,

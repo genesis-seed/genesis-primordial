@@ -1,16 +1,18 @@
 /* exp_runner.js — 用最小浏览器桩在 Node 中原地运行 index.html 的确定性频闪实验
-   用法: node exp_runner.js [seed] [days] [outFile] [cad] [trace]
+   用法: node exp_runner.js [seed] [days] [outFile] [cad] [jitter] [trace]
    例:   node exp_runner.js 2ddf82ed 30 report.json 25,5
-   cad:  逗号分隔的封存节奏（虚拟秒），默认 25,5；报告由引擎直接生成，无需事后加工
-   引擎: ../../index.html（仓库根）；输出 runExp 生成的完整 JSON 报告到 outFile（默认 stdout）
-   参考: report-30d.json 为用本脚本跑出的 30 天报告（25,5） */
+         node exp_runner.js 2ddf82ed 30 report.json 100 20   # cad=100s, jitter=±20s
+   cad:    逗号分隔的封存节奏（虚拟秒），默认 25,5
+   jitter: 每个封存点的随机抖动幅度（秒），0=关闭（打破与周期的通约关系）
+   引擎: ../../index.html（仓库根）；输出 runExp 生成的完整 JSON 报告到 outFile（默认 stdout） */
 const fs = require('fs'), vm = require('vm'), path = require('path');
 
 const seed = process.argv[2] || '2ddf82ed';
 const days = process.argv[3] || '2';
 const outFile = process.argv[4] || null;
-/* 第 5 参数为封存节奏（默认 25,5）；任何位置出现 trace 即开步级追踪 */
+/* 第 5 参数为封存节奏（默认 25,5）；第 6 参数为抖动秒数（默认 0）；任何位置出现 trace 即开步级追踪 */
 const cad = process.argv[5] && process.argv[5] !== 'trace' ? process.argv[5] : '25,5';
+const jitter = process.argv[6] && process.argv[6] !== 'trace' ? process.argv[6] : '0';
 
 const html = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
 const m = html.match(/<script>([\s\S]*?)<\/script>/);
@@ -88,7 +90,7 @@ class StorageShim {
 }
 
 const traceOn = process.argv.includes('trace');
-const search = `?exp=seal&seed=${seed}&days=${days}&cad=${cad}${traceOn ? '&trace=1' : ''}`;
+const search = `?exp=seal&seed=${seed}&days=${days}&cad=${cad}&jitter=${jitter}${traceOn ? '&trace=1' : ''}`;
 let perfT0 = Date.now();
 const sandbox = {
   document: documentStub,
