@@ -128,6 +128,8 @@ canvas{position:absolute;inset:0;display:block}
   background:radial-gradient(ellipse at 50% 40%,rgba(9,20,18,.82),rgba(3,6,11,.94));
   backdrop-filter:blur(6px)}
 .overlay.hidden{display:none}
+#startOverlay{pointer-events:none}
+#startOverlay .card{pointer-events:auto}
 .card{max-width:560px;text-align:center;padding:40px 46px}
 .card h1{font-size:52px;letter-spacing:18px;font-weight:600;margin-left:18px;
   background:linear-gradient(180deg,#eafff4,#7fe6b3 60%,#2ecc7f);
@@ -1858,14 +1860,16 @@ function frame(now){
   sealTimer-=dt;
   if(sealTimer<=0&&started){ sealTimer=25; world.seal(); }
 }
-/* ---- 频闪实验模式：?exp=seal&seed=2ddf82ed&days=30 ----
-   同页顺序跑两遍完全重置的同种子世界，唯一差别为封存节奏（虚拟秒）。
-   全程只走 world.step(1/60) 确定性固定步，不调用渲染；封存走真实 seal() 路径。 */
+/* ---- 频闪实验模式：?exp=seal&seed=2ddf82ed&days=30&cad=25,5 ----
+   同页按 cad（逗号分隔的封存节奏，虚拟秒）顺序跑若干遍完全重置的同种子世界，唯一差别为封存节奏。
+   全程只走 world.step(1/60) 确定性固定步，不调用渲染；封存走真实 seal() 路径。
+   完整报告（逐秒真值曲线 + 四阈值转折统计）由 runExp 直接输出，无需事后加工。 */
 const EXP=(()=>{
   const q=new URLSearchParams(location.search);
   if(q.get('exp')!=='seal') return null;
   const days=Math.max(1,Math.min(120,parseInt(q.get('days'),10)||30));
-  return {seed:q.get('seed')||'2ddf82ed', days};
+  const cad=(q.get('cad')||'25,5').split(',').map(s=>parseInt(s,10)).filter(n=>n>=1);
+  return {seed:q.get('seed')||'2ddf82ed', days, cad:cad.length?cad:[25,5]};
 })();
 
 async function runExp(){
@@ -1915,36 +1919,51 @@ async function runExp(){
     get(){return _aStore;}, set(v){ extLog.push(['animals<-',+world.time.toFixed(3),v&&v.length]); _aStore=v; }});
 
   const t0=performance.now();
-  const A=await runOnce(25,'25s',TRACE);
-  extLog.push(['--- run B begins ---']);
-  const B=await runOnce(5,'5s',false);
+  const runs=[];
+  for(let ci=0;ci<EXP.cad.length;ci++){
+    if(ci>0) extLog.push(['--- run '+ci+' (cad '+EXP.cad[ci]+'s) begins ---']);
+    runs.push(await runOnce(EXP.cad[ci],EXP.cad[ci]+'s',TRACE&&ci===0));
+  }
   const elapsedSec=+((performance.now()-t0)/1000).toFixed(1);
 
-  /* 自检 1：两条独立重放在每个整秒的 p/h/d 完全一致（B 的封存次数是 A 的 5 倍） */
+  /* 自检 1：各次独立重放的逐秒真值与首次完全一致（封存不改变世界状态） */
   const truthMM=[];
-  for(let i=0;i<Math.min(A.truth.length,B.truth.length);i++){
-    const x=A.truth[i], y=B.truth[i];
-    if(x[1]!==y[1]||x[2]!==y[2]||x[3]!==y[3]){
-      truthMM.push([x[0],[x[1],x[2],x[3]],[y[1],y[2],y[3]]]);
-      if(truthMM.length>=10) break;
+  for(let ci=1;ci<runs.length&&truthMM.length<10;ci++){
+    const A=runs[0].truth, B=runs[ci].truth;
+    for(let i=0;i<Math.min(A.length,B.length);i++){
+      const x=A[i], y=B[i];
+      if(x[1]!==y[1]||x[2]!==y[2]||x[3]!==y[3]){
+        truthMM.push([ci,x[0],[x[1],x[2],x[3]],[y[1],y[2],y[3]]]);
+        if(truthMM.length>=10) break;
+      }
     }
   }
-  /* 自检 2：A 的每个封存点也是 B 的封存点，记录一致 */
-  const bMap=new Map(B.seals.map(s=>[s[0],s]));
+  /* 自检 2：节奏成整数倍关系时，疏节奏的每个封存点也落在密节奏上，记录一致 */
   const sealMM=[];
-  for(const s of A.seals){
-    const t=bMap.get(s[0]);
-    if(!t||s[2]!==t[2]||s[3]!==t[3]||s[4]!==t[4]){
-      sealMM.push([s[0],[s[2],s[3],s[4]],t?[t[2],t[3],t[4]]:null]);
-      if(sealMM.length>=10) break;
+  outer:
+  for(let i=0;i<EXP.cad.length;i++){
+    for(let j=0;j<EXP.cad.length;j++){
+      if(i===j||EXP.cad[i]<=EXP.cad[j]||EXP.cad[i]%EXP.cad[j]!==0) continue;
+      const bMap=new Map(runs[j].seals.map(s=>[s[0],s]));
+      for(const s of runs[i].seals){
+        const t=bMap.get(s[0]);
+        if(!t||s[2]!==t[2]||s[3]!==t[3]||s[4]!==t[4]){
+          sealMM.push([EXP.cad[i],EXP.cad[j],s[0],[s[2],s[3],s[4]],t?[t[2],t[3],t[4]]:null]);
+          if(sealMM.length>=10) break outer;
+        }
+      }
     }
   }
 
   /* 归一为 [t, 植物, 动物总数] */
   const normSeal=s=>[s[0],s[2],s[3]+s[4]];
   const normTruth=s=>[s[0],s[1],s[2]+s[3]];
-  const seal25=A.seals.map(normSeal), seal5=B.seals.map(normSeal);
-  const truth5=A.truth.filter(s=>s[0]%5===0).map(normTruth);
+  const key=c=>'sealEvery'+c+'s';
+  const cadAsc=EXP.cad.slice().sort((a,b)=>a-b);
+  const sealCurves={};
+  EXP.cad.forEach((c,i)=>{ sealCurves[key(c)]=runs[i].seals.map(normSeal); });
+  const truth1=runs[0].truth.map(normTruth);
+  const truth5=runs[0].truth.filter(s=>s[0]%5===0).map(normTruth);
 
   const stats=arr=>{
     let pMin=1e9,pMax=-1e9,aMin=1e9,aMax=-1e9;
@@ -1978,39 +1997,60 @@ async function runExp(){
     if(dir) out.push([series[piv][0],series[piv][2],dir===1?'peak':'valley']);
     return out;
   }
-  const truth1=A.truth.map(normTruth);
-  const pivots=zigzag(truth1,10);
-  const capture=(curve,win,tol)=>pivots.map(p=>{
+  const capture=(pivots,curve,win,tol)=>pivots.map(p=>{
     for(const c of curve){
       if(Math.abs(c[0]-p[0])>win) continue;
       if(p[2]==='peak'? c[2]>=p[1]-tol : c[2]<=p[1]+tol) return 1;
     }
     return 0;
   });
-  const cap5=capture(seal5,5,3), cap25=capture(seal25,25,3);
+
+  const cadences={truth:'every 1 world-second (counts only, never sealed)'};
+  cadAsc.forEach(c=>{ cadences[key(c)]='seal at t = '+c+','+(2*c)+','+(3*c)+',...'; });
+
+  /* 四阈值转折统计：真值转折点数、各封存曲线的捕获数（原度量）、各曲线独立转折数（Marey 建议的口径） */
+  const swings={};
+  for(const th of [5,10,20,30]){
+    const pivots=zigzag(truth1,th);
+    const entry={
+      turningPoints:pivots.length,
+      peaks:pivots.filter(p=>p[2]==='peak').length,
+      independentTurningPoints:{truth:pivots.length}
+    };
+    for(const c of cadAsc){
+      entry['capturedBy'+key(c).charAt(0).toUpperCase()+key(c).slice(1)]=capture(pivots,sealCurves[key(c)],c,3).reduce((a,b)=>a+b,0);
+      entry.independentTurningPoints[key(c)]=zigzag(sealCurves[key(c)],th).length;
+    }
+    swings['minAmplitude'+th]=entry;
+  }
+
+  const range={truth:stats(truth1)};
+  cadAsc.forEach(c=>{ range[key(c)]=stats(sealCurves[key(c)]); });
+  const curves={truth1,truth5};
+  cadAsc.forEach(c=>{ curves[key(c)]=sealCurves[key(c)]; });
 
   const report={
-    experiment:'seal-cadence / strobe test',
-    startedAt:new Date().toISOString(), seed:EXP.seed, days:EXP.days,
-    totalSimSec:TOTAL, totalStepsPerRun:N, wallClockSec:elapsedSec,
-    samples:{seal25:seal25.length, seal5:seal5.length, truthPerSec:truth1.length},
+    experiment:'seal-cadence strobe test — does sampling create the oscillation?',
+    date:new Date().toISOString().slice(0,10),
+    seed:EXP.seed,
+    worldDays:EXP.days,
+    worldSeconds:TOTAL,
+    stepsPerRun:N,
+    stepDtWorldSeconds:DT,
+    wallClockSec:elapsedSec,
+    columns:'each sample is [time_world_seconds, plants, herbivores, predators] for truth; [time, plants, animals_total] for seal curves',
+    cadences,
     selfCheck:{
       precondition:'sealing does not alter world state',
       perSecondTruthMismatches:truthMM.length, firstTruthMismatches:truthMM,
       sharedSealMismatches:sealMM.length, firstSharedSealMismatches:sealMM,
       passed: truthMM.length===0 && sealMM.length===0
     },
-    range:{truth:stats(truth1), seal5:stats(seal5), seal25:stats(seal25)},
-    swings:{
-      thresholdAnimals:10, pivotsFound:pivots.length,
-      pivots:pivots.slice(0,60),
-      capturedBySeal5:cap5.reduce((a,b)=>a+b,0),
-      capturedBySeal25:cap25.reduce((a,b)=>a+b,0),
-      captureFlags5:cap5, captureFlags25:cap25
-    },
-    curves:{seal25, seal5, truth5},
-    trace:{boundary:A.boundary, stepTrace:A.stepTrace, extLog}
+    range,
+    swings,
+    curves
   };
+  if(TRACE) report.trace={boundary:runs[0].boundary, stepTrace:runs[0].stepTrace, extLog};
   pre.textContent=JSON.stringify(report,null,1);
   pre.dataset.done='1';
   document.title='EXP DONE';
